@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import { Figtree, Fraunces } from "next/font/google";
+import { PwaRegister } from "@/components/pwa/register";
 import "./globals.css";
 
 const figtree = Figtree({
@@ -14,23 +15,47 @@ const fraunces = Fraunces({
   display: "swap",
 });
 
+const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "https://xx.xacoprol.com";
+
 export const metadata: Metadata = {
+  metadataBase: new URL(appUrl),
   title: {
     default: "X — Gestión del hogar",
     template: "%s · X",
   },
   description: "Aplicación familiar de gastos, menús e hipoteca",
   applicationName: "X",
+  manifest: "/manifest.webmanifest",
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: "black-translucent",
+    title: "X",
+  },
+  formatDetection: {
+    telephone: false,
+  },
   icons: {
-    icon: [{ url: "/brand/icon.png", type: "image/png" }],
-    apple: [{ url: "/brand/apple-touch-icon.png" }],
+    icon: [
+      { url: "/brand/icon-192.png", sizes: "192x192", type: "image/png" },
+      { url: "/brand/icon-512.png", sizes: "512x512", type: "image/png" },
+    ],
+    apple: [{ url: "/brand/apple-touch-icon.png", sizes: "180x180" }],
+  },
+  other: {
+    "mobile-web-app-capable": "yes",
   },
 };
 
 export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
-  themeColor: "#102038",
+  maximumScale: 1,
+  userScalable: false,
+  viewportFit: "cover",
+  themeColor: [
+    { media: "(prefers-color-scheme: light)", color: "#102038" },
+    { media: "(prefers-color-scheme: dark)", color: "#102038" },
+  ],
 };
 
 export default function RootLayout({
@@ -40,7 +65,10 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="es" className={`${figtree.variable} ${fraunces.variable}`}>
-      <body className="min-h-dvh font-sans antialiased">{children}</body>
+      <body className="min-h-dvh font-sans antialiased overscroll-none">
+        {children}
+        <PwaRegister />
+      </body>
     </html>
   );
 }
