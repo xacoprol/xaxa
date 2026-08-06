@@ -5,7 +5,7 @@ import {
   startOfMonth,
   startOfWeek,
 } from "date-fns";
-import { es } from "date-fns/locale";
+import { es } from "date-fns/locale/es";
 import { Wallet, UtensilsCrossed, Landmark, Plus, AlertCircle } from "lucide-react";
 import { requireHousehold } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";

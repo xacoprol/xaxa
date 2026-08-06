@@ -14,10 +14,14 @@ export async function updateSession(request: NextRequest) {
     return NextResponse.redirect(url);
   }
 
+  const isApi = path.startsWith("/api/");
   const isLoginOrRegister =
     path.startsWith("/login") || path.startsWith("/register");
   const isPublic =
-    path === "/" || isLoginOrRegister || path.startsWith("/auth");
+    path === "/" ||
+    isLoginOrRegister ||
+    path.startsWith("/auth") ||
+    isApi; // las APIs gestionan su propia auth (401/403)
 
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
@@ -64,20 +68,23 @@ export async function updateSession(request: NextRequest) {
       data: { user },
     } = await supabase.auth.getUser();
 
-    if (!user && !isPublic) {
-      const redirectUrl = request.nextUrl.clone();
-      redirectUrl.pathname = "/login";
-      return NextResponse.redirect(redirectUrl);
-    }
+    // No redirigir rutas API desde el middleware
+    if (!isApi) {
+      if (!user && !isPublic) {
+        const redirectUrl = request.nextUrl.clone();
+        redirectUrl.pathname = "/login";
+        return NextResponse.redirect(redirectUrl);
+      }
 
-    if (user && isLoginOrRegister) {
-      const redirectUrl = request.nextUrl.clone();
-      redirectUrl.pathname = "/dashboard";
-      return NextResponse.redirect(redirectUrl);
+      if (user && isLoginOrRegister) {
+        const redirectUrl = request.nextUrl.clone();
+        redirectUrl.pathname = "/dashboard";
+        return NextResponse.redirect(redirectUrl);
+      }
     }
   } catch (error) {
     console.error("[middleware] Supabase auth error:", error);
-    if (!isPublic) {
+    if (!isApi && !isPublic) {
       const redirectUrl = request.nextUrl.clone();
       redirectUrl.pathname = "/login";
       return NextResponse.redirect(redirectUrl);

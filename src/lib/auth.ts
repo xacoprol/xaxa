@@ -26,29 +26,36 @@ export async function ensureDbUser() {
   const authUser = await getSessionUser();
   if (!authUser) return null;
 
-  let dbUser = await prisma.user.findUnique({
-    where: { id: authUser.id },
-  });
+  try {
+    let dbUser = await prisma.user.findUnique({
+      where: { id: authUser.id },
+    });
 
-  if (!dbUser) {
-    const { canRegisterNewUser } = await import("@/lib/app-config");
-    const gate = await canRegisterNewUser();
-    if (!gate.allowed) {
-      return null;
+    if (!dbUser) {
+      const { canRegisterNewUser } = await import("@/lib/app-config");
+      const gate = await canRegisterNewUser();
+      if (!gate.allowed) {
+        return null;
+      }
+
+      dbUser = await prisma.user.create({
+        data: {
+          id: authUser.id,
+          email: authUser.email!,
+          name:
+            authUser.user_metadata?.name ??
+            authUser.email!.split("@")[0],
+        },
+      });
     }
 
-    dbUser = await prisma.user.create({
-      data: {
-        id: authUser.id,
-        email: authUser.email!,
-        name:
-          authUser.user_metadata?.name ??
-          authUser.email!.split("@")[0],
-      },
-    });
+    return dbUser;
+  } catch (error) {
+    console.error("[auth] ensureDbUser / Prisma:", error);
+    throw new Error(
+      "No se pudo conectar con la base de datos. Revisa DATABASE_URL y DIRECT_URL en Vercel."
+    );
   }
-
-  return dbUser;
 }
 
 export async function requireUser() {
@@ -59,82 +66,125 @@ export async function requireUser() {
 
 /** Para Route Handlers: no redirige, responde 401. */
 export async function requireApiUser() {
-  const user = await ensureDbUser();
-  if (!user) {
+  try {
+    const user = await ensureDbUser();
+    if (!user) {
+      return {
+        user: null as null,
+        error: NextResponse.json({ error: "No autenticado" }, { status: 401 }),
+      };
+    }
+    return { user, error: null };
+  } catch (error) {
+    console.error("[auth] requireApiUser:", error);
     return {
       user: null as null,
-      error: NextResponse.json({ error: "No autenticado" }, { status: 401 }),
+      error: NextResponse.json(
+        {
+          error:
+            error instanceof Error
+              ? error.message
+              : "Error de base de datos",
+        },
+        { status: 503 }
+      ),
     };
   }
-  return { user, error: null };
 }
 
 export async function requireHousehold() {
   const user = await requireUser();
 
-  const membership = await prisma.householdMember.findFirst({
-    where: { userId: user.id },
-    include: {
-      household: {
-        include: {
-          members: {
-            include: { user: true },
-            orderBy: { joinedAt: "asc" },
+  try {
+    const membership = await prisma.householdMember.findFirst({
+      where: { userId: user.id },
+      include: {
+        household: {
+          include: {
+            members: {
+              include: { user: true },
+              orderBy: { joinedAt: "asc" },
+            },
           },
         },
       },
-    },
-    orderBy: { joinedAt: "asc" },
-  });
+      orderBy: { joinedAt: "asc" },
+    });
 
-  if (!membership) redirect("/onboarding");
+    if (!membership) redirect("/onboarding");
 
-  return {
-    user,
-    membership,
-    household: membership.household,
-    members: membership.household.members,
-    role: membership.role,
-  };
+    return {
+      user,
+      membership,
+      household: membership.household,
+      members: membership.household.members,
+      role: membership.role,
+    };
+  } catch (error) {
+    // next/navigation redirect throws; rethrow
+    if (
+      error &&
+      typeof error === "object" &&
+      "digest" in error &&
+      String((error as { digest?: string }).digest).startsWith("NEXT_REDIRECT")
+    ) {
+      throw error;
+    }
+    console.error("[auth] requireHousehold / Prisma:", error);
+    throw new Error(
+      "No se pudo conectar con la base de datos. Revisa DATABASE_URL y DIRECT_URL en Vercel."
+    );
+  }
 }
 
 export async function requireApiHousehold() {
   const { user, error } = await requireApiUser();
   if (error || !user) return { ctx: null, error: error! };
 
-  const membership = await prisma.householdMember.findFirst({
-    where: { userId: user.id },
-    include: {
-      household: {
-        include: {
-          members: {
-            include: { user: true },
-            orderBy: { joinedAt: "asc" },
+  try {
+    const membership = await prisma.householdMember.findFirst({
+      where: { userId: user.id },
+      include: {
+        household: {
+          include: {
+            members: {
+              include: { user: true },
+              orderBy: { joinedAt: "asc" },
+            },
           },
         },
       },
-    },
-    orderBy: { joinedAt: "asc" },
-  });
+      orderBy: { joinedAt: "asc" },
+    });
 
-  if (!membership) {
+    if (!membership) {
+      return {
+        ctx: null,
+        error: NextResponse.json(
+          { error: "Sin hogar asignado" },
+          { status: 403 }
+        ),
+      };
+    }
+
+    return {
+      ctx: {
+        user,
+        membership,
+        household: membership.household,
+        members: membership.household.members,
+        role: membership.role,
+      },
+      error: null,
+    };
+  } catch (err) {
+    console.error("[auth] requireApiHousehold:", err);
     return {
       ctx: null,
       error: NextResponse.json(
-        { error: "Sin hogar asignado" },
-        { status: 403 }
+        { error: "Error de base de datos" },
+        { status: 503 }
       ),
     };
   }
-
-  return {
-    ctx: {
-      user,
-      membership,
-      household: membership.household,
-      members: membership.household.members,
-      role: membership.role,
-    },
-    error: null,
-  };
 }
