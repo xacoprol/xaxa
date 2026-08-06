@@ -1,0 +1,222 @@
+// X — Gestión familiar del hogar
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+enum HouseholdRole {
+  ADMIN
+  MEMBER
+}
+
+enum ExpenseType {
+  SHARED
+  INDIVIDUAL
+}
+
+enum MealType {
+  COMIDA
+  CENA
+}
+
+enum MortgageEntryStatus {
+  PENDIENTE
+  EN_CURSO
+  CERRADO
+}
+
+model User {
+  id        String   @id @db.Uuid // = auth.users.id de Supabase
+  email     String   @unique
+  name      String
+  avatarUrl String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  memberships      HouseholdMember[]
+  expensesPaid     Expense[]           @relation("ExpensePaidBy")
+  expenseSplits    ExpenseSplit[]
+  menuPreference   MenuPreference?
+  favoriteMeals    Meal[]              @relation("MealFavoritedBy")
+  mortgageEntries  MortgageEntry[]     @relation("MortgageEntryCreatedBy")
+}
+
+model Household {
+  id        String   @id @default(cuid())
+  name      String
+  inviteCode String  @unique @default(cuid())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  members           HouseholdMember[]
+  categories        ExpenseCategory[]
+  expenses          Expense[]
+  weeklyMenus       WeeklyMenu[]
+  mortgage          Mortgage?
+  mortgageEntries   MortgageEntry[]
+}
+
+model HouseholdMember {
+  id          String        @id @default(cuid())
+  householdId String
+  userId      String        @db.Uuid
+  role        HouseholdRole @default(MEMBER)
+  joinedAt    DateTime      @default(now())
+
+  household Household @relation(fields: [householdId], references: [id], onDelete: Cascade)
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([householdId, userId])
+  @@index([userId])
+}
+
+model ExpenseCategory {
+  id          String   @id @default(cuid())
+  householdId String
+  name        String
+  color       String   @default("#10b981")
+  createdAt   DateTime @default(now())
+
+  household Household @relation(fields: [householdId], references: [id], onDelete: Cascade)
+  expenses  Expense[]
+
+  @@unique([householdId, name])
+  @@index([householdId])
+}
+
+model Expense {
+  id          String      @id @default(cuid())
+  householdId String
+  categoryId  String
+  amount      Decimal     @db.Decimal(12, 2)
+  date        DateTime    @db.Date
+  note        String?
+  type        ExpenseType @default(SHARED)
+  paidById    String      @db.Uuid
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+
+  household Household      @relation(fields: [householdId], references: [id], onDelete: Cascade)
+  category  ExpenseCategory @relation(fields: [categoryId], references: [id])
+  paidBy    User            @relation("ExpensePaidBy", fields: [paidById], references: [id])
+  splits    ExpenseSplit[]
+
+  @@index([householdId, date])
+  @@index([paidById])
+  @@index([categoryId])
+}
+
+model ExpenseSplit {
+  id       String  @id @default(cuid())
+  expenseId String
+  userId   String  @db.Uuid
+  percent  Decimal @db.Decimal(5, 2) // 0–100
+
+  expense Expense @relation(fields: [expenseId], references: [id], onDelete: Cascade)
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([expenseId, userId])
+  @@index([userId])
+}
+
+model MenuPreference {
+  id              String   @id @default(cuid())
+  userId          String   @unique @db.Uuid
+  allergies       String[] @default([])
+  dislikes        String[] @default([])
+  goal            String?  // e.g. "perder peso", "ganar músculo", "equilibrado"
+  mealsPerWeek    Int      @default(14) // comidas + cenas a cubrir
+  extraNotes      String?
+  updatedAt       DateTime @updatedAt
+  createdAt       DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model WeeklyMenu {
+  id          String   @id @default(cuid())
+  householdId String
+  weekStart   DateTime @db.Date // lunes de la semana
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  household Household @relation(fields: [householdId], references: [id], onDelete: Cascade)
+  meals     Meal[]
+
+  @@unique([householdId, weekStart])
+  @@index([householdId])
+}
+
+model Meal {
+  id            String   @id @default(cuid())
+  weeklyMenuId  String
+  dayOfWeek     Int      // 0=lunes … 6=domingo
+  mealType      MealType
+  name          String
+  ingredients   Json     // string[] o {name, quantity, unit}[]
+  steps         String[]
+  estimatedMins Int?
+  isFavorite    Boolean  @default(false)
+  favoritedById String?  @db.Uuid
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  weeklyMenu  WeeklyMenu @relation(fields: [weeklyMenuId], references: [id], onDelete: Cascade)
+  favoritedBy User?      @relation("MealFavoritedBy", fields: [favoritedById], references: [id])
+
+  @@unique([weeklyMenuId, dayOfWeek, mealType])
+  @@index([weeklyMenuId])
+}
+
+model Mortgage {
+  id           String    @id @default(cuid())
+  householdId  String    @unique
+  amount       Decimal?  @db.Decimal(14, 2)
+  termYears    Int?
+  interestRate Decimal?  @db.Decimal(6, 3) // %
+  bank         String?
+  signedAt     DateTime? @db.Date
+  notes        String?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  household Household @relation(fields: [householdId], references: [id], onDelete: Cascade)
+}
+
+model MortgageEntry {
+  id          String              @id @default(cuid())
+  householdId String
+  title       String
+  description String?
+  date        DateTime            @db.Date
+  status      MortgageEntryStatus @default(PENDIENTE)
+  createdById String              @db.Uuid
+  createdAt   DateTime            @default(now())
+  updatedAt   DateTime            @updatedAt
+
+  household   Household            @relation(fields: [householdId], references: [id], onDelete: Cascade)
+  createdBy   User                 @relation("MortgageEntryCreatedBy", fields: [createdById], references: [id])
+  attachments MortgageAttachment[]
+
+  @@index([householdId, date])
+  @@index([householdId, status])
+}
+
+model MortgageAttachment {
+  id        String   @id @default(cuid())
+  entryId   String
+  fileName  String
+  fileUrl   String   // path en Supabase Storage
+  mimeType  String?
+  sizeBytes Int?
+  createdAt DateTime @default(now())
+
+  entry MortgageEntry @relation(fields: [entryId], references: [id], onDelete: Cascade)
+
+  @@index([entryId])
+}
