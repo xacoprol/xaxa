@@ -3,6 +3,17 @@ import { NextResponse, type NextRequest } from "next/server";
 
 export async function updateSession(request: NextRequest) {
   const path = request.nextUrl.pathname;
+
+  // Confirmación de email antigua / Site URL mal puesta: /?code=... → /auth/callback
+  if (
+    (path === "/" || path === "") &&
+    request.nextUrl.searchParams.has("code")
+  ) {
+    const url = request.nextUrl.clone();
+    url.pathname = "/auth/callback";
+    return NextResponse.redirect(url);
+  }
+
   const isLoginOrRegister =
     path.startsWith("/login") || path.startsWith("/register");
   const isPublic =
