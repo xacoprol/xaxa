@@ -2,7 +2,7 @@
 
 App privada para un hogar (familia): **Gastos**, **Menús con IA** e **Hipoteca**.
 
-Stack: **Next.js 14 (App Router) · TypeScript · Tailwind · Prisma · PostgreSQL (Supabase) · Supabase Auth · Supabase Storage · OpenAI**.
+Stack: **Next.js 14 (App Router) · TypeScript · Tailwind · Prisma · PostgreSQL (Neon) · Supabase Auth/Storage · OpenAI**.
 
 ## Estructura
 
@@ -30,18 +30,14 @@ cp .env.example .env
 ```
 
 2. Rellena en `.env`:
-   - `NEXT_PUBLIC_SUPABASE_URL` / `NEXT_PUBLIC_SUPABASE_ANON_KEY`
-   - `DATABASE_URL` (pooler, puerto **6543**, `?pgbouncer=true`)
-   - `DIRECT_URL` (conexión directa, puerto **5432**, para migraciones)
+   - Supabase Auth: `NEXT_PUBLIC_SUPABASE_URL` / `NEXT_PUBLIC_SUPABASE_ANON_KEY` (legacy `eyJ…`)
+   - Neon: `DATABASE_URL` (pooled, host con `-pooler`) y `DIRECT_URL` (directa)
    - `OPENAI_API_KEY`
-   - (opcional) `SUPABASE_SERVICE_ROLE_KEY`
+   - `NEXT_PUBLIC_APP_URL`
 
-3. En Supabase:
-   - Auth → Email/Password activado (sin providers sociales).
-   - SQL Editor → aplica el schema con Prisma (`npm run db:push`).
-   - Storage → crea bucket público `mortgage-attachments` (o privado + signed URLs).
+3. En Supabase: Auth email/password + Storage bucket `mortgage-attachments`.
 
-4. Instala y genera cliente Prisma:
+4. Aplica schema en Neon y arranca:
 
 ```bash
 npm install
