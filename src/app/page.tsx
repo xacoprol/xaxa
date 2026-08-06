@@ -3,6 +3,8 @@ import { redirect } from "next/navigation";
 import { getSessionUser } from "@/lib/auth";
 import { BrandLogo } from "@/components/brand/logo";
 
+export const dynamic = "force-dynamic";
+
 export default async function HomePage() {
   const user = await getSessionUser();
   if (user) redirect("/dashboard");
