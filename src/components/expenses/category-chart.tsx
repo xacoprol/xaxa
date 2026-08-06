@@ -54,7 +54,7 @@ export function CategoryChart({
               fontSize: 13,
             }}
           />
-          <Bar dataKey="total" radius={[6, 6, 0, 0]} fill="#059669" />
+          <Bar dataKey="total" radius={[6, 6, 0, 0]} fill="#08a080" />
         </BarChart>
       </ResponsiveContainer>
     </div>

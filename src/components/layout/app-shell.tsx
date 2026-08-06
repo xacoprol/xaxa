@@ -12,6 +12,7 @@ import {
   X,
 } from "lucide-react";
 import { useState } from "react";
+import { BrandLogo } from "@/components/brand/logo";
 import { cn } from "@/lib/utils";
 import { createClient } from "@/lib/supabase/client";
 import { MODULE_ACCENTS } from "@/lib/constants";
@@ -59,7 +60,7 @@ export function AppShell({
   }
 
   return (
-    <div className="min-h-dvh bg-[radial-gradient(ellipse_at_top,_#fafaf9_0%,_#f5f5f4_45%,_#e7e5e4_100%)]">
+    <div className="min-h-dvh bg-[radial-gradient(ellipse_at_top,_#eef7f4_0%,_#f4f7f6_45%,_#e2ebe8_100%)]">
       {/* Top bar */}
       <header className="sticky top-0 z-40 border-b border-stone-200/80 bg-white/80 backdrop-blur-md">
         <div className="mx-auto flex h-14 max-w-5xl items-center justify-between px-4">
@@ -72,14 +73,12 @@ export function AppShell({
             >
               {open ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
             </button>
-            <Link href="/dashboard" className="flex items-baseline gap-1.5">
-              <span className="font-display text-2xl font-semibold tracking-tight text-stone-900">
-                X
-              </span>
+            <div className="flex items-center gap-2.5">
+              <BrandLogo href="/dashboard" size="sm" />
               <span className="hidden text-xs font-medium uppercase tracking-widest text-stone-400 sm:inline">
                 {householdName}
               </span>
-            </Link>
+            </div>
           </div>
           <div className="flex items-center gap-3">
             <span className="hidden text-sm text-stone-500 sm:inline">
@@ -88,7 +87,7 @@ export function AppShell({
             <button
               type="button"
               onClick={signOut}
-              className="rounded-lg p-2 text-stone-500 hover:bg-stone-100 hover:text-stone-800"
+              className="rounded-lg p-2 text-stone-500 hover:bg-stone-100 hover:text-navy"
               aria-label="Cerrar sesión"
             >
               <LogOut className="h-4 w-4" />
@@ -114,7 +113,7 @@ export function AppShell({
                       className={cn(
                         "flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium",
                         active
-                          ? "bg-stone-900 text-white"
+                          ? "bg-navy text-white"
                           : "text-stone-600 hover:bg-stone-50"
                       )}
                     >
@@ -145,8 +144,8 @@ export function AppShell({
                   className={cn(
                     "flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-colors",
                     active
-                      ? "bg-stone-900 text-white shadow-sm"
-                      : "text-stone-600 hover:bg-white hover:text-stone-900"
+                      ? "bg-navy text-white shadow-sm"
+                      : "text-stone-600 hover:bg-white hover:text-navy"
                   )}
                 >
                   <Icon className="h-4 w-4" />
@@ -180,7 +179,7 @@ export function AppShell({
                   href={item.href}
                   className={cn(
                     "flex flex-col items-center gap-0.5 py-2 text-[10px] font-medium",
-                    active ? "text-stone-900" : "text-stone-400"
+                    active ? "text-navy" : "text-stone-400"
                   )}
                 >
                   <Icon

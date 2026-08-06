@@ -21,12 +21,16 @@ export const metadata: Metadata = {
   },
   description: "Aplicación familiar de gastos, menús e hipoteca",
   applicationName: "X",
+  icons: {
+    icon: [{ url: "/brand/icon.png", type: "image/png" }],
+    apple: [{ url: "/brand/apple-touch-icon.png" }],
+  },
 };
 
 export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
-  themeColor: "#f5f5f4",
+  themeColor: "#102038",
 };
 
 export default function RootLayout({

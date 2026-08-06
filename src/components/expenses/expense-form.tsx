@@ -197,15 +197,15 @@ export function ExpenseForm({
       </div>
 
       {type === "SHARED" && (
-        <div className="rounded-xl border border-emerald-100 bg-emerald-50/50 p-4">
+        <div className="rounded-xl border border-teal-100 bg-teal-50/50 p-4">
           <div className="mb-3 flex items-center justify-between">
-            <p className="text-sm font-medium text-emerald-900">
+            <p className="text-sm font-medium text-teal-900">
               Reparto por porcentaje
             </p>
             <button
               type="button"
               onClick={distributeEqual}
-              className="text-xs font-medium text-emerald-700 underline"
+              className="text-xs font-medium text-teal-700 underline"
             >
               Equitativo
             </button>
@@ -237,7 +237,7 @@ export function ExpenseForm({
           <p
             className={`mt-3 text-xs ${
               Math.abs(splitTotal - 100) < 0.05
-                ? "text-emerald-700"
+                ? "text-teal-700"
                 : "text-amber-700"
             }`}
           >
@@ -269,7 +269,7 @@ export function ExpenseForm({
         >
           Cancelar
         </Button>
-        <Button type="submit" variant="emerald" className="flex-1" loading={loading}>
+        <Button type="submit" variant="teal" className="flex-1" loading={loading}>
           {initial?.id ? "Guardar" : "Añadir gasto"}
         </Button>
       </div>

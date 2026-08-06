@@ -1,19 +1,28 @@
 import { cn } from "@/lib/utils";
 import { ButtonHTMLAttributes, forwardRef } from "react";
 
-type Variant = "primary" | "secondary" | "ghost" | "danger" | "emerald" | "amber" | "sky";
+type Variant =
+  | "primary"
+  | "secondary"
+  | "ghost"
+  | "danger"
+  | "teal"
+  | "emerald"
+  | "amber"
+  | "sky";
 type Size = "sm" | "md" | "lg";
 
 const variants: Record<Variant, string> = {
   primary:
-    "bg-stone-900 text-white hover:bg-stone-800 focus-visible:ring-stone-900",
+    "bg-navy text-white hover:bg-navy-800 focus-visible:ring-navy",
   secondary:
-    "bg-white text-stone-800 border border-stone-200 hover:bg-stone-50 focus-visible:ring-stone-400",
-  ghost: "bg-transparent text-stone-600 hover:bg-stone-100 focus-visible:ring-stone-400",
+    "bg-white text-navy border border-stone-200 hover:bg-stone-50 focus-visible:ring-navy/30",
+  ghost: "bg-transparent text-stone-600 hover:bg-stone-100 focus-visible:ring-navy/30",
   danger:
     "bg-red-600 text-white hover:bg-red-700 focus-visible:ring-red-600",
+  teal: "bg-teal text-white hover:bg-teal-600 focus-visible:ring-teal",
   emerald:
-    "bg-emerald-600 text-white hover:bg-emerald-700 focus-visible:ring-emerald-600",
+    "bg-teal text-white hover:bg-teal-600 focus-visible:ring-teal",
   amber:
     "bg-amber-600 text-white hover:bg-amber-700 focus-visible:ring-amber-600",
   sky: "bg-sky-600 text-white hover:bg-sky-700 focus-visible:ring-sky-600",

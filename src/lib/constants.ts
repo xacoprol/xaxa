@@ -1,13 +1,13 @@
 export const MODULE_ACCENTS = {
   expenses: {
     name: "Gastos",
-    color: "emerald",
-    bg: "bg-emerald-500",
-    bgSoft: "bg-emerald-50",
-    text: "text-emerald-700",
-    border: "border-emerald-200",
-    ring: "ring-emerald-500",
-    hex: "#059669",
+    color: "teal",
+    bg: "bg-teal",
+    bgSoft: "bg-teal-50",
+    text: "text-teal-700",
+    border: "border-teal-200",
+    ring: "ring-teal",
+    hex: "#08a080",
   },
   menus: {
     name: "Menús",
@@ -27,14 +27,14 @@ export const MODULE_ACCENTS = {
     text: "text-sky-700",
     border: "border-sky-200",
     ring: "ring-sky-500",
-    hex: "#0284c7",
+    hex: "#3b82c4",
   },
 } as const;
 
 export const DEFAULT_CATEGORIES = [
-  { name: "Supermercado", color: "#059669" },
+  { name: "Supermercado", color: "#08a080" },
   { name: "Restaurantes", color: "#d97706" },
-  { name: "Transporte", color: "#0284c7" },
+  { name: "Transporte", color: "#3b82c4" },
   { name: "Hogar", color: "#7c3aed" },
   { name: "Ocio", color: "#db2777" },
   { name: "Salud", color: "#dc2626" },

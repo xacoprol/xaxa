@@ -6,6 +6,7 @@ import { FormEvent, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { BrandLogo } from "@/components/brand/logo";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -67,7 +68,7 @@ export default function LoginPage() {
       </form>
       <p className="mt-6 text-center text-sm text-stone-500">
         ¿No tienes cuenta?{" "}
-        <Link href="/register" className="font-medium text-stone-900 underline">
+        <Link href="/register" className="font-medium text-navy underline">
           Regístrate
         </Link>
       </p>
@@ -85,13 +86,11 @@ function AuthShell({
   children: React.ReactNode;
 }) {
   return (
-    <div className="flex min-h-dvh items-center justify-center bg-[radial-gradient(ellipse_at_top,_#e7e5e4_0%,_#f5f5f4_50%)] px-4 py-12">
+    <div className="flex min-h-dvh items-center justify-center bg-[radial-gradient(ellipse_at_top,_#c5efe6_0%,_#f4f7f6_55%)] px-4 py-12">
       <div className="w-full max-w-sm">
-        <div className="mb-8 text-center">
-          <Link href="/" className="font-display text-4xl font-semibold text-stone-900">
-            X
-          </Link>
-          <h1 className="mt-4 text-xl font-semibold text-stone-900">{title}</h1>
+        <div className="mb-8 flex flex-col items-center text-center">
+          <BrandLogo size="lg" />
+          <h1 className="mt-4 text-xl font-semibold text-navy">{title}</h1>
           <p className="mt-1 text-sm text-stone-500">{subtitle}</p>
         </div>
         <div className="rounded-2xl border border-stone-200/80 bg-white p-6 shadow-soft">

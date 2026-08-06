@@ -4,6 +4,7 @@ import { FormEvent, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { BrandLogo } from "@/components/brand/logo";
 
 export default function OnboardingPage() {
   const router = useRouter();
@@ -40,13 +41,11 @@ export default function OnboardingPage() {
   }
 
   return (
-    <div className="flex min-h-dvh items-center justify-center bg-[radial-gradient(ellipse_at_top,_#e7e5e4_0%,_#f5f5f4_50%)] px-4 py-12">
+    <div className="flex min-h-dvh items-center justify-center bg-[radial-gradient(ellipse_at_top,_#c5efe6_0%,_#f4f7f6_55%)] px-4 py-12">
       <div className="w-full max-w-md">
-        <div className="mb-8 text-center">
-          <p className="font-display text-4xl font-semibold text-stone-900">X</p>
-          <h1 className="mt-4 text-xl font-semibold text-stone-900">
-            Tu hogar
-          </h1>
+        <div className="mb-8 flex flex-col items-center text-center">
+          <BrandLogo href={null} size="lg" />
+          <h1 className="mt-4 text-xl font-semibold text-navy">Tu hogar</h1>
           <p className="mt-1 text-sm text-stone-500">
             Crea un hogar nuevo o únete con un código de invitación
           </p>
@@ -59,7 +58,7 @@ export default function OnboardingPage() {
               onClick={() => setMode("create")}
               className={`rounded-lg py-2 text-sm font-medium transition ${
                 mode === "create"
-                  ? "bg-white text-stone-900 shadow-sm"
+                  ? "bg-white text-navy shadow-sm"
                   : "text-stone-500"
               }`}
             >
@@ -70,7 +69,7 @@ export default function OnboardingPage() {
               onClick={() => setMode("join")}
               className={`rounded-lg py-2 text-sm font-medium transition ${
                 mode === "join"
-                  ? "bg-white text-stone-900 shadow-sm"
+                  ? "bg-white text-navy shadow-sm"
                   : "text-stone-500"
               }`}
             >

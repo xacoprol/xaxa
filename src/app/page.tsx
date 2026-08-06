@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getSessionUser } from "@/lib/auth";
+import { BrandLogo } from "@/components/brand/logo";
 
 export default async function HomePage() {
   const user = await getSessionUser();
@@ -12,26 +13,27 @@ export default async function HomePage() {
         className="pointer-events-none absolute inset-0"
         style={{
           background:
-            "radial-gradient(ellipse 80% 60% at 50% -10%, #d6d3d1 0%, transparent 55%), radial-gradient(ellipse 50% 40% at 100% 100%, #a8a29e33 0%, transparent 50%), #f5f5f4",
+            "radial-gradient(ellipse 80% 55% at 20% -5%, #08a08033 0%, transparent 50%), radial-gradient(ellipse 60% 40% at 100% 100%, #10203822 0%, transparent 45%), #f4f7f6",
         }}
       />
       <main className="relative z-10 mx-auto flex w-full max-w-lg flex-1 flex-col justify-center px-6 py-16">
-        <p className="font-display text-7xl font-semibold tracking-tight text-stone-900 sm:text-8xl">
+        <BrandLogo href={null} size="xl" />
+        <h1 className="font-display mt-6 text-4xl font-semibold tracking-tight text-navy sm:text-5xl">
           X
-        </p>
+        </h1>
         <p className="mt-3 max-w-sm text-lg text-stone-600 text-balance">
           El hogar, en orden. Gastos, menús e hipoteca para tu familia.
         </p>
         <div className="mt-10 flex flex-col gap-3 sm:flex-row">
           <Link
             href="/login"
-            className="inline-flex h-12 items-center justify-center rounded-xl bg-stone-900 px-6 text-sm font-medium text-white transition hover:bg-stone-800"
+            className="inline-flex h-12 items-center justify-center rounded-xl bg-navy px-6 text-sm font-medium text-white transition hover:bg-navy-800"
           >
             Entrar
           </Link>
           <Link
             href="/register"
-            className="inline-flex h-12 items-center justify-center rounded-xl border border-stone-300 bg-white/70 px-6 text-sm font-medium text-stone-800 backdrop-blur transition hover:bg-white"
+            className="inline-flex h-12 items-center justify-center rounded-xl border border-teal/30 bg-white/80 px-6 text-sm font-medium text-navy backdrop-blur transition hover:border-teal hover:bg-white"
           >
             Crear cuenta
           </Link>

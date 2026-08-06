@@ -114,7 +114,7 @@ export function PreferencesForm({
         </p>
       )}
       {message && (
-        <p className="rounded-lg bg-emerald-50 px-3 py-2 text-sm text-emerald-700">
+        <p className="rounded-lg bg-teal-50 px-3 py-2 text-sm text-teal-700">
           {message}
         </p>
       )}

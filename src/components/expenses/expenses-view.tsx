@@ -57,7 +57,7 @@ export function ExpensesView({
     <div className="space-y-6">
       <header className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <p className="text-xs font-medium uppercase tracking-widest text-emerald-600">
+          <p className="text-xs font-medium uppercase tracking-widest text-teal-600">
             Gastos
           </p>
           <h1 className="font-display text-3xl font-semibold tracking-tight text-stone-900">
@@ -89,7 +89,7 @@ export function ExpensesView({
             <span className="hidden sm:inline">CSV</span>
           </a>
           <Link href="/gastos/nuevo">
-            <Button variant="emerald" size="md">
+            <Button variant="teal" size="md">
               <Plus className="h-4 w-4" />
               <span className="hidden sm:inline">Añadir</span>
             </Button>
@@ -97,8 +97,8 @@ export function ExpensesView({
         </div>
       </header>
 
-      <div className="rounded-2xl border border-emerald-100 bg-gradient-to-br from-emerald-50 to-white p-5 shadow-soft">
-        <p className="text-xs font-medium uppercase tracking-wider text-emerald-700/80">
+      <div className="rounded-2xl border border-teal-100 bg-gradient-to-br from-teal-50 to-white p-5 shadow-soft">
+        <p className="text-xs font-medium uppercase tracking-wider text-teal-700/80">
           Total del mes
         </p>
         <p className="font-display mt-1 text-4xl font-semibold tracking-tight text-stone-900">
@@ -149,10 +149,10 @@ export function ExpensesView({
               {balances.map((b) => (
                 <li
                   key={`${b.fromId}-${b.toId}`}
-                  className="rounded-xl border border-emerald-100 bg-emerald-50/60 px-3 py-2.5 text-sm text-stone-700"
+                  className="rounded-xl border border-teal-100 bg-teal-50/60 px-3 py-2.5 text-sm text-stone-700"
                 >
                   <span className="font-medium">{b.fromName}</span> debe{" "}
-                  <span className="font-semibold text-emerald-800">
+                  <span className="font-semibold text-teal-800">
                     {formatCurrency(b.amount)}
                   </span>{" "}
                   a <span className="font-medium">{b.toName}</span>
@@ -171,7 +171,7 @@ export function ExpensesView({
           {expenses.length === 0 && (
             <li className="px-4 py-10 text-center text-sm text-stone-400">
               No hay gastos este mes.{" "}
-              <Link href="/gastos/nuevo" className="text-emerald-700 underline">
+              <Link href="/gastos/nuevo" className="text-teal-700 underline">
                 Añade el primero
               </Link>
             </li>
