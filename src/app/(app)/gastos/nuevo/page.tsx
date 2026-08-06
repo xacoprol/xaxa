@@ -16,7 +16,7 @@ export default async function NuevoGastoPage() {
       <header>
         <Link
           href="/gastos"
-          className="text-sm font-medium text-emerald-700 hover:underline"
+          className="text-sm font-medium text-teal-700 hover:underline"
         >
           ← Gastos
         </Link>
