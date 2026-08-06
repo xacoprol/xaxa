@@ -1,12 +1,23 @@
 "use client";
 
 import Link from "next/link";
+import dynamic from "next/dynamic";
 import { useRouter } from "next/navigation";
 import { ChevronLeft, ChevronRight, Download, Plus, Pencil, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { formatCurrency, formatDate } from "@/lib/utils";
-import { CategoryChart } from "./category-chart";
 import type { BalanceEdge } from "@/lib/expenses/balance";
+
+const CategoryChart = dynamic(
+  () =>
+    import("./category-chart").then((m) => m.CategoryChart),
+  {
+    ssr: false,
+    loading: () => (
+      <p className="py-8 text-center text-sm text-stone-400">Cargando gráfico…</p>
+    ),
+  }
+);
 
 type ExpenseRow = {
   id: string;

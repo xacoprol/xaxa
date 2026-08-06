@@ -20,13 +20,13 @@ export default async function DashboardPage() {
   const weekStart = startOfWeek(now, { weekStartsOn: 1 });
   const dayOfWeek = (now.getDay() + 6) % 7; // lunes=0
 
-  const [expenses, pendingMortgage, weeklyMenu] = await Promise.all([
-    prisma.expense.findMany({
+  const [expenseSum, pendingMortgage, weeklyMenu] = await Promise.all([
+    prisma.expense.aggregate({
       where: {
         householdId: household.id,
         date: { gte: monthStart, lte: monthEnd },
       },
-      select: { amount: true },
+      _sum: { amount: true },
     }),
     prisma.mortgageEntry.findFirst({
       where: {
@@ -34,6 +34,12 @@ export default async function DashboardPage() {
         status: "PENDIENTE",
       },
       orderBy: { date: "asc" },
+      select: {
+        id: true,
+        title: true,
+        description: true,
+        date: true,
+      },
     }),
     prisma.weeklyMenu.findUnique({
       where: {
@@ -46,12 +52,13 @@ export default async function DashboardPage() {
         meals: {
           where: { dayOfWeek },
           orderBy: { mealType: "asc" },
+          select: { id: true, name: true, mealType: true },
         },
       },
     }),
   ]);
 
-  const monthTotal = expenses.reduce((s, e) => s + Number(e.amount), 0);
+  const monthTotal = Number(expenseSum._sum.amount ?? 0);
   const todayMeals = weeklyMenu?.meals ?? [];
 
   return (

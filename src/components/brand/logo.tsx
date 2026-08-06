@@ -36,7 +36,7 @@ export function BrandLogo({
         width={px}
         height={px}
         className="object-contain"
-        priority
+        priority={size === "xl" || size === "lg"}
       />
       {showWordmark && (
         <span className="font-display text-2xl font-semibold tracking-tight text-navy">

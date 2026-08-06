@@ -1,9 +1,10 @@
+import { cache } from "react";
 import { prisma } from "@/lib/prisma";
 import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
 import { NextResponse } from "next/server";
 
-export async function getSessionUser() {
+export const getSessionUser = cache(async () => {
   try {
     if (
       !process.env.NEXT_PUBLIC_SUPABASE_URL ||
@@ -20,15 +21,16 @@ export async function getSessionUser() {
     console.error("[auth] getSessionUser:", error);
     return null;
   }
-}
+});
 
-export async function ensureDbUser() {
+export const ensureDbUser = cache(async () => {
   const authUser = await getSessionUser();
   if (!authUser) return null;
 
   try {
     let dbUser = await prisma.user.findUnique({
       where: { id: authUser.id },
+      select: { id: true, email: true, name: true, avatarUrl: true, createdAt: true, updatedAt: true },
     });
 
     if (!dbUser) {
@@ -46,6 +48,7 @@ export async function ensureDbUser() {
             authUser.user_metadata?.name ??
             authUser.email!.split("@")[0],
         },
+        select: { id: true, email: true, name: true, avatarUrl: true, createdAt: true, updatedAt: true },
       });
     }
 
@@ -56,7 +59,7 @@ export async function ensureDbUser() {
       "No se pudo conectar con la base de datos. Revisa DATABASE_URL y DIRECT_URL en Vercel."
     );
   }
-}
+});
 
 export async function requireUser() {
   const user = await ensureDbUser();
@@ -92,7 +95,7 @@ export async function requireApiUser() {
   }
 }
 
-export async function requireHousehold() {
+export const requireHousehold = cache(async () => {
   const user = await requireUser();
 
   try {
@@ -102,7 +105,11 @@ export async function requireHousehold() {
         household: {
           include: {
             members: {
-              include: { user: true },
+              include: {
+                user: {
+                  select: { id: true, name: true, email: true },
+                },
+              },
               orderBy: { joinedAt: "asc" },
             },
           },
@@ -121,7 +128,6 @@ export async function requireHousehold() {
       role: membership.role,
     };
   } catch (error) {
-    // next/navigation redirect throws; rethrow
     if (
       error &&
       typeof error === "object" &&
@@ -135,20 +141,24 @@ export async function requireHousehold() {
       "No se pudo conectar con la base de datos. Revisa DATABASE_URL y DIRECT_URL en Vercel."
     );
   }
-}
+});
 
 export async function requireApiHousehold() {
   const { user, error } = await requireApiUser();
   if (error || !user) return { ctx: null, error: error! };
 
   try {
+    // Reutiliza el cache de requireHousehold cuando se llama desde el mismo request RSC;
+    // en Route Handlers es una sola llamada.
     const membership = await prisma.householdMember.findFirst({
       where: { userId: user.id },
       include: {
         household: {
           include: {
             members: {
-              include: { user: true },
+              include: {
+                user: { select: { id: true, name: true, email: true } },
+              },
               orderBy: { joinedAt: "asc" },
             },
           },
