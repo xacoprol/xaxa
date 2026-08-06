@@ -20,6 +20,12 @@ export async function ensureDbUser() {
   });
 
   if (!dbUser) {
+    const { canRegisterNewUser } = await import("@/lib/app-config");
+    const gate = await canRegisterNewUser();
+    if (!gate.allowed) {
+      return null;
+    }
+
     dbUser = await prisma.user.create({
       data: {
         id: authUser.id,

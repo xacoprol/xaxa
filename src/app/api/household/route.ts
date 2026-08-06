@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireApiUser } from "@/lib/auth";
 import { DEFAULT_CATEGORIES } from "@/lib/constants";
+import { getAppConfig, MAX_USERS_WHEN_LIMITED } from "@/lib/app-config";
 
 export async function POST(request: Request) {
   const { user, error } = await requireApiUser();
@@ -62,11 +63,25 @@ export async function POST(request: Request) {
 
     const household = await prisma.household.findUnique({
       where: { inviteCode },
+      include: { _count: { select: { members: true } } },
     });
     if (!household) {
       return NextResponse.json(
         { error: "Código de invitación no válido" },
         { status: 404 }
+      );
+    }
+
+    const config = await getAppConfig();
+    if (
+      config.limitTwoUsers &&
+      household._count.members >= MAX_USERS_WHEN_LIMITED
+    ) {
+      return NextResponse.json(
+        {
+          error: `Este hogar ya tiene ${MAX_USERS_WHEN_LIMITED} miembros y el límite está activo.`,
+        },
+        { status: 403 }
       );
     }
 

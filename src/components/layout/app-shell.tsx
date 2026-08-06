@@ -10,6 +10,7 @@ import {
   LogOut,
   Menu,
   X,
+  Settings,
 } from "lucide-react";
 import { useState } from "react";
 import { BrandLogo } from "@/components/brand/logo";
@@ -36,6 +37,12 @@ const nav = [
     label: "Hipoteca",
     icon: Landmark,
     accent: MODULE_ACCENTS.mortgage,
+  },
+  {
+    href: "/configuracion",
+    label: "Ajustes",
+    icon: Settings,
+    accent: null,
   },
 ] as const;
 
