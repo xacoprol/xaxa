@@ -60,6 +60,7 @@ model Household {
   weeklyMenus       WeeklyMenu[]
   mortgage          Mortgage?
   mortgageEntries   MortgageEntry[]
+  ingredientPrices  IngredientPrice[]
 }
 
 model HouseholdMember {
@@ -227,4 +228,20 @@ model AppConfig {
   id             String   @id @default("default")
   limitTwoUsers  Boolean  @default(true)
   updatedAt      DateTime @updatedAt
+}
+
+/// Precio estimado por ingrediente (por hogar), editable desde la lista de compra
+model IngredientPrice {
+  id          String   @id @default(cuid())
+  householdId String
+  nameKey     String   // normalizado (minúsculas, sin acentos)
+  name        String
+  unitPrice   Decimal  @db.Decimal(10, 2) // € estimado por línea de compra
+  updatedAt   DateTime @updatedAt
+  createdAt   DateTime @default(now())
+
+  household Household @relation(fields: [householdId], references: [id], onDelete: Cascade)
+
+  @@unique([householdId, nameKey])
+  @@index([householdId])
 }
