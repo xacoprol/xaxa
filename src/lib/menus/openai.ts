@@ -114,9 +114,13 @@ export async function generateWeeklyMeals(
   return parsed.data.meals;
 }
 
+import { aggregateQuantities } from "@/lib/menus/aggregate-quantities";
+
 export type ShoppingItem = {
   name: string;
   quantities: string[];
+  /** Summed display, e.g. "400 g" or "0.4 kg" */
+  totalQty: string | null;
   count: number;
 };
 
@@ -157,13 +161,17 @@ export function buildShoppingList(
         map.set(key, {
           name,
           quantities: qty ? [qty] : [],
+          totalQty: null,
           count: 1,
         });
       }
     }
   }
 
-  return Array.from(map.values()).sort((a, b) =>
-    a.name.localeCompare(b.name, "es")
-  );
+  return Array.from(map.values())
+    .map((item) => ({
+      ...item,
+      totalQty: aggregateQuantities(item.quantities),
+    }))
+    .sort((a, b) => a.name.localeCompare(b.name, "es"));
 }

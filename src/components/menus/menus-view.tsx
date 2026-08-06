@@ -22,6 +22,7 @@ type ShoppingItem = {
   name: string;
   nameKey?: string;
   quantities: string[];
+  totalQty?: string | null;
   count: number;
   unitPrice: number | null;
   source: "saved" | "default" | null;
@@ -348,11 +349,13 @@ export function MenusView({
                           {item.name}
                         </p>
                         <p className="text-xs text-stone-400">
-                          {item.quantities.length > 0
-                            ? item.quantities.join(" + ")
-                            : item.count > 1
-                              ? `×${item.count}`
-                              : "—"}
+                          {item.totalQty
+                            ? item.totalQty
+                            : item.quantities.length > 0
+                              ? item.quantities.join(" + ")
+                              : item.count > 1
+                                ? `×${item.count}`
+                                : "—"}
                         </p>
                       </button>
 
