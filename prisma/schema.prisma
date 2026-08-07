@@ -25,6 +25,12 @@ enum MealType {
   CENA
 }
 
+enum MealDifficulty {
+  FACIL
+  MEDIA
+  ELABORADA
+}
+
 enum MortgageEntryStatus {
   PENDIENTE
   EN_CURSO
@@ -58,6 +64,7 @@ model Household {
   categories        ExpenseCategory[]
   expenses          Expense[]
   weeklyMenus       WeeklyMenu[]
+  recipes           Recipe[]
   mortgage          Mortgage?
   mortgageEntries   MortgageEntry[]
   ingredientPrices  IngredientPrice[]
@@ -155,24 +162,56 @@ model WeeklyMenu {
 }
 
 model Meal {
-  id            String   @id @default(cuid())
+  id            String         @id @default(cuid())
   weeklyMenuId  String
-  dayOfWeek     Int      // 0=lunes … 6=domingo
+  dayOfWeek     Int // 0=lunes … 6=domingo
   mealType      MealType
   name          String
-  ingredients   Json     // string[] o {name, quantity, unit}[]
+  description   String?
+  ingredients   Json // string[] o {name, quantity, unit}[]
   steps         String[]
+  servings      Int            @default(2)
+  difficulty    MealDifficulty @default(MEDIA)
+  tags          String[]       @default([])
+  imageUrl      String?
+  prepMins      Int?
+  cookMins      Int?
   estimatedMins Int?
-  isFavorite    Boolean  @default(false)
-  favoritedById String?  @db.Uuid
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  isFavorite    Boolean        @default(false)
+  favoritedById String?        @db.Uuid
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
 
   weeklyMenu  WeeklyMenu @relation(fields: [weeklyMenuId], references: [id], onDelete: Cascade)
   favoritedBy User?      @relation("MealFavoritedBy", fields: [favoritedById], references: [id])
 
   @@unique([weeklyMenuId, dayOfWeek, mealType])
   @@index([weeklyMenuId])
+}
+
+/// Recetas favoritas del hogar (persisten al regenerar la semana)
+model Recipe {
+  id           String         @id @default(cuid())
+  householdId  String
+  name         String
+  description  String?
+  ingredients  Json
+  steps        String[]
+  servings     Int            @default(2)
+  difficulty   MealDifficulty @default(MEDIA)
+  tags         String[]       @default([])
+  imageUrl     String?
+  prepMins     Int?
+  cookMins     Int?
+  estimatedMins Int?
+  sourceMealId String?
+  createdAt    DateTime       @default(now())
+  updatedAt    DateTime       @updatedAt
+
+  household Household @relation(fields: [householdId], references: [id], onDelete: Cascade)
+
+  @@unique([householdId, name])
+  @@index([householdId])
 }
 
 model Mortgage {

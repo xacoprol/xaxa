@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { requireApiHousehold } from "@/lib/auth";
 import { generateWeeklyMeals } from "@/lib/menus/openai";
 import { z } from "zod";
+import type { MealDifficulty, Prisma } from "@prisma/client";
 
 function monday(date = new Date()) {
   return startOfWeek(date, { weekStartsOn: 1 });
@@ -74,9 +75,20 @@ export async function POST(request: Request) {
           extraNotes: null as string | null,
         }));
 
+  const favoriteRecipes = await prisma.recipe.findMany({
+    where: { householdId: ctx.household.id },
+    orderBy: { updatedAt: "desc" },
+    take: 5,
+    select: { name: true },
+  });
+
   let meals;
   try {
-    meals = await generateWeeklyMeals(preferenceInputs, days);
+    meals = await generateWeeklyMeals(
+      preferenceInputs,
+      days,
+      favoriteRecipes.map((r) => r.name)
+    );
   } catch (e) {
     const message = e instanceof Error ? e.message : "Error generando menú";
     return NextResponse.json({ error: message }, { status: 502 });
@@ -108,17 +120,23 @@ export async function POST(request: Request) {
       await tx.meal.deleteMany({ where: { weeklyMenuId: weekly.id } });
     }
 
-    await tx.meal.createMany({
-      data: meals.map((m) => ({
-        weeklyMenuId: weekly.id,
-        dayOfWeek: m.dayOfWeek,
-        mealType: m.mealType,
-        name: m.name,
-        ingredients: m.ingredients,
-        steps: m.steps,
-        estimatedMins: m.estimatedMins ?? null,
-      })),
-    });
+    const rows: Prisma.MealCreateManyInput[] = meals.map((m) => ({
+      weeklyMenuId: weekly.id,
+      dayOfWeek: m.dayOfWeek,
+      mealType: m.mealType,
+      name: m.name,
+      description: m.description ?? null,
+      ingredients: m.ingredients as Prisma.InputJsonValue,
+      steps: m.steps,
+      servings: m.servings ?? 2,
+      difficulty: (m.difficulty ?? "MEDIA") as MealDifficulty,
+      tags: m.tags ?? [],
+      prepMins: m.prepMins ?? null,
+      cookMins: m.cookMins ?? null,
+      estimatedMins: m.estimatedMins ?? null,
+    }));
+
+    await tx.meal.createMany({ data: rows });
 
     return tx.weeklyMenu.findUnique({
       where: { id: weekly.id },
@@ -128,5 +146,8 @@ export async function POST(request: Request) {
     });
   });
 
-  return NextResponse.json({ menu });
+  return NextResponse.json({
+    menu,
+    needsImages: true,
+  });
 }

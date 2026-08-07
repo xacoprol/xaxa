@@ -1,21 +1,55 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Check, Heart, RefreshCw, ShoppingCart, Sparkles } from "lucide-react";
+import {
+  Check,
+  Clock,
+  Heart,
+  RefreshCw,
+  ShoppingCart,
+  Sparkles,
+  Users,
+  BookHeart,
+  X,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { DAY_LABELS } from "@/lib/constants";
 import { cn } from "@/lib/utils";
+
+type Difficulty = "FACIL" | "MEDIA" | "ELABORADA";
 
 type Meal = {
   id: string;
   dayOfWeek: number;
   mealType: "COMIDA" | "CENA";
   name: string;
+  description?: string | null;
   ingredients: unknown;
   steps: string[];
+  servings?: number;
+  difficulty?: Difficulty;
+  tags?: string[];
+  imageUrl?: string | null;
+  prepMins?: number | null;
+  cookMins?: number | null;
   estimatedMins: number | null;
   isFavorite: boolean;
+};
+
+type Recipe = {
+  id: string;
+  name: string;
+  description: string | null;
+  ingredients: unknown;
+  steps: string[];
+  servings: number;
+  difficulty: Difficulty;
+  tags: string[];
+  imageUrl: string | null;
+  prepMins: number | null;
+  cookMins: number | null;
+  estimatedMins: number | null;
 };
 
 type ShoppingItem = {
@@ -28,6 +62,16 @@ type ShoppingItem = {
   source: "saved" | "default" | null;
 };
 
+type DetailItem =
+  | ({ kind: "meal" } & Meal)
+  | ({ kind: "recipe" } & Recipe);
+
+const DIFFICULTY_LABEL: Record<Difficulty, string> = {
+  FACIL: "Fácil",
+  MEDIA: "Media",
+  ELABORADA: "Elaborada",
+};
+
 function checkedKey(weekStartIso: string) {
   return `xaxa:shopping-checked:${weekStartIso}`;
 }
@@ -38,7 +82,11 @@ function loadChecked(weekStartIso: string): Set<string> {
     const raw = localStorage.getItem(checkedKey(weekStartIso));
     if (!raw) return new Set();
     const parsed = JSON.parse(raw) as unknown;
-    return new Set(Array.isArray(parsed) ? parsed.filter((x) => typeof x === "string") : []);
+    return new Set(
+      Array.isArray(parsed)
+        ? parsed.filter((x) => typeof x === "string")
+        : []
+    );
   } catch {
     return new Set();
   }
@@ -51,24 +99,95 @@ function saveChecked(weekStartIso: string, checked: Set<string>) {
   );
 }
 
+function formatIngredient(ing: unknown): string {
+  if (typeof ing === "string") return ing;
+  if (ing && typeof ing === "object" && "name" in ing) {
+    const o = ing as { name: string; quantity?: string | number; unit?: string };
+    const qty =
+      o.quantity != null
+        ? ` — ${o.quantity}${o.unit ? ` ${o.unit}` : ""}`
+        : "";
+    return `${o.name}${qty}`;
+  }
+  return String(ing);
+}
+
 export function MenusView({
   weekStartIso,
-  meals,
+  meals: initialMeals,
 }: {
   weekStartIso: string;
   meals: Meal[];
 }) {
   const router = useRouter();
+  const [meals, setMeals] = useState<Meal[]>(initialMeals);
   const [generating, setGenerating] = useState(false);
+  const [imaging, setImaging] = useState(false);
   const [regenDay, setRegenDay] = useState<number | null>(null);
   const [shopping, setShopping] = useState<ShoppingItem[] | null>(null);
   const [checked, setChecked] = useState<Set<string>>(() => new Set());
   const [error, setError] = useState<string | null>(null);
-  const [selected, setSelected] = useState<Meal | null>(null);
+  const [selected, setSelected] = useState<DetailItem | null>(null);
   const [savingPrice, setSavingPrice] = useState<string | null>(null);
+  const [tab, setTab] = useState<"semana" | "favoritos">("semana");
+  const [recipes, setRecipes] = useState<Recipe[] | null>(null);
+  const [loadingRecipes, setLoadingRecipes] = useState(false);
+
+  useEffect(() => {
+    setMeals(initialMeals);
+  }, [initialMeals]);
 
   useEffect(() => {
     setChecked(loadChecked(weekStartIso));
+  }, [weekStartIso]);
+
+  const fillImages = useCallback(
+    async (mealIds?: string[]) => {
+      setImaging(true);
+      let guard = 0;
+      try {
+        while (guard < 14) {
+          guard += 1;
+          const res = await fetch("/api/menus/images", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              mealIds,
+              limit: 2,
+            }),
+          });
+          const data = await res.json();
+          if (!res.ok) break;
+
+          if (Array.isArray(data.updated) && data.updated.length) {
+            setMeals((prev) =>
+              prev.map((m) => {
+                const hit = data.updated.find(
+                  (u: { id: string; imageUrl: string }) => u.id === m.id
+                );
+                return hit ? { ...m, imageUrl: hit.imageUrl } : m;
+              })
+            );
+          }
+
+          if (data.done) break;
+          if (!data.updated?.length) break;
+        }
+      } finally {
+        setImaging(false);
+        router.refresh();
+      }
+    },
+    [router]
+  );
+
+  useEffect(() => {
+    const missing = meals.filter((m) => !m.imageUrl).map((m) => m.id);
+    if (missing.length && !imaging && !generating) {
+      void fillImages(missing);
+    }
+    // Solo al montar / cambiar semana con huecos
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [weekStartIso]);
 
   const shoppingTotals = useMemo(() => {
@@ -110,15 +229,40 @@ export function MenusView({
       body: JSON.stringify({ weekStart: weekStartIso, days }),
     });
     const data = await res.json();
-    if (!res.ok) setError(data.error ?? "Error al generar");
+    if (!res.ok) {
+      setError(data.error ?? "Error al generar");
+      setGenerating(false);
+      setRegenDay(null);
+      return;
+    }
+
+    const nextMeals = (data.menu?.meals ?? []) as Meal[];
+    setMeals(nextMeals);
     setGenerating(false);
     setRegenDay(null);
     router.refresh();
+
+    const ids = days
+      ? nextMeals.filter((m) => days.includes(m.dayOfWeek)).map((m) => m.id)
+      : nextMeals.map((m) => m.id);
+    void fillImages(ids);
   }
 
   async function toggleFavorite(id: string) {
-    await fetch(`/api/menus/meals/${id}/favorite`, { method: "PATCH" });
-    router.refresh();
+    const res = await fetch(`/api/menus/meals/${id}/favorite`, {
+      method: "PATCH",
+    });
+    if (!res.ok) return;
+    const data = await res.json();
+    setMeals((prev) =>
+      prev.map((m) =>
+        m.id === id ? { ...m, isFavorite: data.meal.isFavorite } : m
+      )
+    );
+    if (selected?.kind === "meal" && selected.id === id) {
+      setSelected({ ...selected, isFavorite: data.meal.isFavorite });
+    }
+    if (tab === "favoritos") void loadRecipes();
   }
 
   async function loadShopping() {
@@ -167,6 +311,20 @@ export function MenusView({
     );
   }
 
+  async function loadRecipes() {
+    setLoadingRecipes(true);
+    const res = await fetch("/api/menus/recipes");
+    const data = await res.json();
+    setRecipes(data.recipes ?? []);
+    setLoadingRecipes(false);
+  }
+
+  async function removeRecipe(id: string) {
+    await fetch(`/api/menus/recipes?id=${id}`, { method: "DELETE" });
+    setRecipes((prev) => (prev ? prev.filter((r) => r.id !== id) : prev));
+    if (selected?.kind === "recipe" && selected.id === id) setSelected(null);
+  }
+
   return (
     <div className="space-y-6">
       <header className="flex flex-wrap items-end justify-between gap-3">
@@ -177,12 +335,33 @@ export function MenusView({
           <h1 className="font-display text-3xl font-semibold tracking-tight text-stone-900">
             Semana
           </h1>
+          <p className="mt-1 text-sm text-stone-500">
+            {meals.length
+              ? `${meals.length} platos · ${meals.filter((m) => m.imageUrl).length} con foto`
+              : "Genera el menú de la semana"}
+            {imaging ? " · generando fotos…" : ""}
+          </p>
         </div>
         <div className="flex flex-wrap gap-2">
           <Button
+            variant={tab === "favoritos" ? "amber" : "secondary"}
+            size="sm"
+            onClick={() => {
+              setTab("favoritos");
+              setShopping(null);
+              void loadRecipes();
+            }}
+          >
+            <BookHeart className="h-4 w-4" />
+            Favoritos
+          </Button>
+          <Button
             variant="secondary"
             size="sm"
-            onClick={loadShopping}
+            onClick={() => {
+              setTab("semana");
+              void loadShopping();
+            }}
             disabled={!meals.length}
           >
             <ShoppingCart className="h-4 w-4" />
@@ -192,7 +371,10 @@ export function MenusView({
             variant="amber"
             size="sm"
             loading={generating}
-            onClick={() => generate()}
+            onClick={() => {
+              setTab("semana");
+              void generate();
+            }}
           >
             <Sparkles className="h-4 w-4" />
             Generar menú
@@ -200,298 +382,197 @@ export function MenusView({
         </div>
       </header>
 
+      <div className="flex gap-2 border-b border-stone-200 pb-2">
+        <button
+          type="button"
+          onClick={() => setTab("semana")}
+          className={cn(
+            "rounded-lg px-3 py-1.5 text-sm font-medium transition",
+            tab === "semana"
+              ? "bg-amber-50 text-amber-800"
+              : "text-stone-500 hover:text-stone-800"
+          )}
+        >
+          Esta semana
+        </button>
+        <button
+          type="button"
+          onClick={() => {
+            setTab("favoritos");
+            void loadRecipes();
+          }}
+          className={cn(
+            "rounded-lg px-3 py-1.5 text-sm font-medium transition",
+            tab === "favoritos"
+              ? "bg-amber-50 text-amber-800"
+              : "text-stone-500 hover:text-stone-800"
+          )}
+        >
+          Biblioteca
+        </button>
+      </div>
+
       {error && (
         <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">
           {error}
         </p>
       )}
 
-      {/* Calendar grid */}
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-7">
-        {DAY_LABELS.map((label, day) => {
-          const comida = byDay[day].COMIDA;
-          const cena = byDay[day].CENA;
-          return (
-            <div
-              key={label}
-              className="rounded-2xl border border-stone-200/80 bg-white p-3 shadow-soft"
-            >
-              <div className="mb-2 flex items-center justify-between">
-                <p className="text-xs font-semibold uppercase tracking-wider text-stone-500">
-                  {label.slice(0, 3)}
-                </p>
-                <button
-                  type="button"
-                  title="Regenerar día"
-                  disabled={regenDay === day}
-                  onClick={() => generate([day])}
-                  className="rounded-md p-1 text-stone-400 hover:bg-amber-50 hover:text-amber-700 disabled:opacity-50"
-                >
-                  <RefreshCw
-                    className={cn(
-                      "h-3.5 w-3.5",
-                      regenDay === day && "animate-spin"
-                    )}
-                  />
-                </button>
-              </div>
-              <MealChip
-                label="Comida"
-                meal={comida}
-                onOpen={setSelected}
-                onFavorite={toggleFavorite}
-              />
-              <MealChip
-                label="Cena"
-                meal={cena}
-                onOpen={setSelected}
-                onFavorite={toggleFavorite}
-              />
-            </div>
-          );
-        })}
-      </div>
-
-      {shopping && (
-        <section className="rounded-2xl border border-amber-100 bg-amber-50/50 p-5">
-          <div className="mb-3 flex flex-wrap items-end justify-between gap-2">
-            <div>
-              <h2 className="font-display text-lg font-semibold text-stone-900">
-                Lista de la compra
-              </h2>
-              <p className="text-xs text-stone-500">
-                Toca para marcar · se guarda en este móvil
-              </p>
-            </div>
-            <div className="flex items-center gap-3">
-              {shoppingTotals.done > 0 && (
-                <button
-                  type="button"
-                  className="text-sm text-stone-500 underline"
-                  onClick={resetChecked}
-                >
-                  Reiniciar
-                </button>
-              )}
-              <button
-                type="button"
-                className="text-sm text-stone-500 underline"
-                onClick={() => setShopping(null)}
-              >
-                Cerrar
-              </button>
-            </div>
-          </div>
-
-          {shopping.length === 0 ? (
-            <p className="text-sm text-stone-500">Sin ingredientes</p>
-          ) : (
-            <>
-              <div className="mb-3 flex items-center justify-between rounded-xl bg-white/70 px-3 py-2 text-sm">
-                <span className="font-medium text-stone-800">
-                  {shoppingTotals.done}/{shopping.length} en el carro
-                </span>
-                <div className="h-1.5 w-24 overflow-hidden rounded-full bg-stone-200">
-                  <div
-                    className="h-full rounded-full bg-teal transition-all"
-                    style={{
-                      width: `${
-                        shopping.length
-                          ? (shoppingTotals.done / shopping.length) * 100
-                          : 0
-                      }%`,
-                    }}
-                  />
-                </div>
-              </div>
-
-              <ul className="space-y-2">
-                {orderedShopping.map((item) => {
-                  const done = checked.has(item.name);
-                  return (
-                    <li
-                      key={item.name}
+      {tab === "semana" && (
+        <div className="space-y-4">
+          {DAY_LABELS.map((label, day) => {
+            const comida = byDay[day].COMIDA;
+            const cena = byDay[day].CENA;
+            return (
+              <section key={label} className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <h2 className="font-display text-lg font-semibold text-stone-900">
+                    {label}
+                  </h2>
+                  <button
+                    type="button"
+                    title="Regenerar día"
+                    disabled={regenDay === day || generating}
+                    onClick={() => generate([day])}
+                    className="inline-flex items-center gap-1 rounded-lg px-2 py-1 text-xs font-medium text-stone-500 hover:bg-amber-50 hover:text-amber-800 disabled:opacity-50"
+                  >
+                    <RefreshCw
                       className={cn(
-                        "flex items-center gap-3 rounded-xl bg-white/80 px-3 py-3 text-sm text-stone-700",
-                        done && "opacity-55"
+                        "h-3.5 w-3.5",
+                        regenDay === day && "animate-spin"
                       )}
-                    >
-                      <button
-                        type="button"
-                        onClick={() => toggleChecked(item.name)}
-                        aria-pressed={done}
-                        aria-label={
-                          done
-                            ? `Desmarcar ${item.name}`
-                            : `Marcar ${item.name}`
-                        }
-                        className={cn(
-                          "flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border-2 transition",
-                          done
-                            ? "border-teal bg-teal text-white"
-                            : "border-stone-300 bg-white text-transparent active:border-teal"
-                        )}
-                      >
-                        <Check className="h-5 w-5" strokeWidth={3} />
-                      </button>
+                    />
+                    Regenerar
+                  </button>
+                </div>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <MealCard
+                    label="Comida"
+                    meal={comida}
+                    onOpen={(m) => setSelected({ kind: "meal", ...m })}
+                    onFavorite={toggleFavorite}
+                  />
+                  <MealCard
+                    label="Cena"
+                    meal={cena}
+                    onOpen={(m) => setSelected({ kind: "meal", ...m })}
+                    onFavorite={toggleFavorite}
+                  />
+                </div>
+              </section>
+            );
+          })}
+        </div>
+      )}
 
-                      <button
-                        type="button"
-                        onClick={() => toggleChecked(item.name)}
-                        className="min-w-0 flex-1 text-left"
-                      >
-                        <p
-                          className={cn(
-                            "font-medium text-stone-900",
-                            done && "line-through decoration-stone-400"
-                          )}
-                        >
-                          {item.name}
-                        </p>
-                        <p className="text-xs text-stone-400">
-                          {item.totalQty
-                            ? item.totalQty
-                            : item.quantities.length > 0
-                              ? item.quantities.join(" + ")
-                              : item.count > 1
-                                ? `×${item.count}`
-                                : "—"}
-                        </p>
-                      </button>
-
-                      <div
-                        className="flex shrink-0 items-center gap-1"
-                        onClick={(e) => e.stopPropagation()}
-                      >
-                        <span className="text-xs text-stone-400">€</span>
-                        <input
-                          type="number"
-                          inputMode="decimal"
-                          min={0}
-                          step={0.1}
-                          className="h-9 w-16 rounded-lg border border-stone-200 bg-white px-2 text-right text-sm"
-                          value={item.unitPrice ?? ""}
-                          placeholder="—"
-                          disabled={savingPrice === item.name}
-                          onChange={(e) => {
-                            const raw = e.target.value;
-                            const value =
-                              raw === "" ? null : parseFloat(raw);
-                            setShopping((prev) =>
-                              prev
-                                ? prev.map((row) =>
-                                    row.name === item.name
-                                      ? {
-                                          ...row,
-                                          unitPrice:
-                                            value != null &&
-                                            !Number.isNaN(value)
-                                              ? value
-                                              : null,
-                                        }
-                                      : row
-                                  )
-                                : prev
-                            );
-                          }}
-                          onBlur={(e) => {
-                            const value = parseFloat(e.target.value);
-                            if (!Number.isNaN(value) && value >= 0) {
-                              void savePrice(item.name, value);
-                            }
-                          }}
-                        />
-                      </div>
-                    </li>
-                  );
-                })}
-              </ul>
-
-              <div className="mt-4 flex items-center justify-between rounded-xl border border-amber-200 bg-white px-4 py-3">
-                <div>
-                  <p className="text-xs font-medium uppercase tracking-wider text-amber-700/80">
-                    Total estimado
-                  </p>
-                  <p className="text-xs text-stone-400">
-                    {shoppingTotals.pricedCount}/{shopping.length} con precio
+      {tab === "favoritos" && (
+        <div>
+          {loadingRecipes && (
+            <p className="text-sm text-stone-400">Cargando favoritos…</p>
+          )}
+          {!loadingRecipes && recipes && recipes.length === 0 && (
+            <p className="rounded-2xl border border-dashed border-stone-200 bg-white/60 px-4 py-10 text-center text-sm text-stone-500">
+              Aún no hay favoritos. Marca el corazón en un plato para guardarlo
+              aquí.
+            </p>
+          )}
+          <div className="grid gap-3 sm:grid-cols-2">
+            {(recipes ?? []).map((recipe) => (
+              <button
+                key={recipe.id}
+                type="button"
+                onClick={() => setSelected({ kind: "recipe", ...recipe })}
+                className="overflow-hidden rounded-2xl border border-stone-200/80 bg-white text-left shadow-soft transition hover:border-amber-200"
+              >
+                <MealPhoto
+                  src={recipe.imageUrl}
+                  alt={recipe.name}
+                  className="aspect-[4/3] w-full"
+                />
+                <div className="p-3">
+                  <p className="font-medium text-stone-900">{recipe.name}</p>
+                  <p className="mt-0.5 line-clamp-2 text-xs text-stone-500">
+                    {recipe.description ||
+                      DIFFICULTY_LABEL[recipe.difficulty]}
                   </p>
                 </div>
-                <p className="font-display text-2xl font-semibold text-navy">
-                  {shoppingTotals.estimatedTotal.toLocaleString("es-ES", {
-                    style: "currency",
-                    currency: "EUR",
-                  })}
-                </p>
-              </div>
-            </>
-          )}
-        </section>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {shopping && tab === "semana" && (
+        <ShoppingPanel
+          shopping={shopping}
+          orderedShopping={orderedShopping}
+          shoppingTotals={shoppingTotals}
+          checked={checked}
+          savingPrice={savingPrice}
+          onClose={() => setShopping(null)}
+          onReset={resetChecked}
+          onToggle={toggleChecked}
+          onSavePrice={savePrice}
+          setShopping={setShopping}
+        />
       )}
 
       {selected && (
-        <div
-          className="fixed inset-0 z-50 flex items-end justify-center bg-stone-900/40 p-4 sm:items-center"
-          onClick={() => setSelected(null)}
-        >
-          <div
-            className="max-h-[85dvh] w-full max-w-md overflow-y-auto rounded-2xl bg-white p-5 shadow-xl"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <p className="text-xs font-medium uppercase tracking-wider text-amber-600">
-              {DAY_LABELS[selected.dayOfWeek]} · {selected.mealType}
-            </p>
-            <h3 className="font-display mt-1 text-2xl font-semibold text-stone-900">
-              {selected.name}
-            </h3>
-            {selected.estimatedMins && (
-              <p className="mt-1 text-sm text-stone-500">
-                ~{selected.estimatedMins} min
-              </p>
-            )}
-            <h4 className="mt-4 text-sm font-semibold text-stone-800">
-              Ingredientes
-            </h4>
-            <ul className="mt-1 list-inside list-disc text-sm text-stone-600">
-              {(Array.isArray(selected.ingredients)
-                ? selected.ingredients
-                : []
-              ).map((ing, i) => (
-                <li key={i}>
-                  {typeof ing === "string"
-                    ? ing
-                    : `${(ing as { name: string }).name}${
-                        (ing as { quantity?: string }).quantity
-                          ? ` — ${(ing as { quantity?: string }).quantity}${
-                              (ing as { unit?: string }).unit
-                                ? ` ${(ing as { unit?: string }).unit}`
-                                : ""
-                            }`
-                          : ""
-                      }`}
-                </li>
-              ))}
-            </ul>
-            <h4 className="mt-4 text-sm font-semibold text-stone-800">Pasos</h4>
-            <ol className="mt-1 list-inside list-decimal space-y-1 text-sm text-stone-600">
-              {selected.steps.map((s, i) => (
-                <li key={i}>{s}</li>
-              ))}
-            </ol>
-            <Button
-              className="mt-5 w-full"
-              variant="secondary"
-              onClick={() => setSelected(null)}
-            >
-              Cerrar
-            </Button>
-          </div>
+        <RecipeSheet
+          item={selected}
+          onClose={() => setSelected(null)}
+          onFavorite={
+            selected.kind === "meal"
+              ? () => toggleFavorite(selected.id)
+              : undefined
+          }
+          onRemoveRecipe={
+            selected.kind === "recipe"
+              ? () => removeRecipe(selected.id)
+              : undefined
+          }
+        />
+      )}
+    </div>
+  );
+}
+
+function MealPhoto({
+  src,
+  alt,
+  className,
+}: {
+  src?: string | null;
+  alt: string;
+  className?: string;
+}) {
+  return (
+    <div
+      className={cn(
+        "relative overflow-hidden bg-gradient-to-br from-amber-100 via-stone-100 to-teal-50",
+        className
+      )}
+    >
+      {src ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img
+          src={src}
+          alt={alt}
+          className="h-full w-full object-cover"
+          loading="lazy"
+        />
+      ) : (
+        <div className="absolute inset-0 flex items-center justify-center">
+          <span className="text-xs font-medium uppercase tracking-wider text-amber-700/50">
+            Sin foto
+          </span>
         </div>
       )}
     </div>
   );
 }
 
-function MealChip({
+function MealCard({
   label,
   meal,
   onOpen,
@@ -504,39 +585,59 @@ function MealChip({
 }) {
   if (!meal) {
     return (
-      <div className="mb-2 rounded-lg bg-stone-50 px-2 py-2">
-        <p className="text-[10px] uppercase tracking-wide text-stone-400">
-          {label}
-        </p>
-        <p className="text-xs text-stone-300">—</p>
+      <div className="overflow-hidden rounded-2xl border border-dashed border-stone-200 bg-stone-50/80">
+        <div className="aspect-[4/3] bg-stone-100" />
+        <div className="p-3">
+          <p className="text-[10px] uppercase tracking-wide text-stone-400">
+            {label}
+          </p>
+          <p className="text-sm text-stone-300">Sin plato</p>
+        </div>
       </div>
     );
   }
 
+  const mins = meal.estimatedMins;
+  const difficulty = meal.difficulty ?? "MEDIA";
+
   return (
-    <div className="mb-2 rounded-lg bg-amber-50/60 px-2 py-2">
-      <div className="flex items-start justify-between gap-1">
+    <div className="group overflow-hidden rounded-2xl border border-stone-200/80 bg-white shadow-soft">
+      <button
+        type="button"
+        onClick={() => onOpen(meal)}
+        className="block w-full text-left"
+      >
+        <MealPhoto
+          src={meal.imageUrl}
+          alt={meal.name}
+          className="aspect-[4/3] w-full"
+        />
+      </button>
+      <div className="flex items-start gap-2 p-3">
         <button
           type="button"
           onClick={() => onOpen(meal)}
-          className="min-w-0 text-left"
+          className="min-w-0 flex-1 text-left"
         >
           <p className="text-[10px] uppercase tracking-wide text-amber-700/70">
             {label}
           </p>
-          <p className="line-clamp-2 text-xs font-medium text-stone-800">
-            {meal.name}
+          <p className="font-medium text-stone-900">{meal.name}</p>
+          <p className="mt-1 flex flex-wrap gap-x-2 gap-y-0.5 text-xs text-stone-500">
+            <span>{DIFFICULTY_LABEL[difficulty]}</span>
+            {mins != null && <span>· {mins} min</span>}
+            {meal.servings != null && <span>· {meal.servings} raciones</span>}
           </p>
         </button>
         <button
           type="button"
           onClick={() => onFavorite(meal.id)}
-          className="shrink-0 p-0.5"
+          className="shrink-0 rounded-lg p-1.5 hover:bg-amber-50"
           aria-label="Favorito"
         >
           <Heart
             className={cn(
-              "h-3.5 w-3.5",
+              "h-4 w-4",
               meal.isFavorite
                 ? "fill-amber-500 text-amber-500"
                 : "text-stone-300"
@@ -545,5 +646,335 @@ function MealChip({
         </button>
       </div>
     </div>
+  );
+}
+
+function RecipeSheet({
+  item,
+  onClose,
+  onFavorite,
+  onRemoveRecipe,
+}: {
+  item: DetailItem;
+  onClose: () => void;
+  onFavorite?: () => void;
+  onRemoveRecipe?: () => void;
+}) {
+  const difficulty = item.difficulty ?? "MEDIA";
+  const mins = item.estimatedMins;
+  const ingredients = Array.isArray(item.ingredients) ? item.ingredients : [];
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-end justify-center bg-stone-900/45 sm:items-center sm:p-4"
+      onClick={onClose}
+    >
+      <div
+        className="flex max-h-[92dvh] w-full max-w-lg flex-col overflow-hidden rounded-t-3xl bg-white shadow-xl sm:rounded-3xl"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="relative shrink-0">
+          <MealPhoto
+            src={item.imageUrl}
+            alt={item.name}
+            className="aspect-[16/10] w-full"
+          />
+          <button
+            type="button"
+            onClick={onClose}
+            className="absolute right-3 top-3 rounded-full bg-white/90 p-2 text-stone-700 shadow"
+            aria-label="Cerrar"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+
+        <div className="overflow-y-auto px-5 pb-8 pt-4">
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <h3 className="font-display text-2xl font-semibold text-stone-900">
+                {item.name}
+              </h3>
+              {item.description && (
+                <p className="mt-2 text-sm leading-relaxed text-stone-600">
+                  {item.description}
+                </p>
+              )}
+            </div>
+            {item.kind === "meal" && onFavorite && (
+              <button
+                type="button"
+                onClick={onFavorite}
+                className="shrink-0 rounded-xl p-2 hover:bg-amber-50"
+              >
+                <Heart
+                  className={cn(
+                    "h-5 w-5",
+                    item.isFavorite
+                      ? "fill-amber-500 text-amber-500"
+                      : "text-stone-300"
+                  )}
+                />
+              </button>
+            )}
+          </div>
+
+          <div className="mt-4 flex flex-wrap gap-3 text-xs text-stone-600">
+            <span className="inline-flex items-center gap-1 rounded-lg bg-amber-50 px-2.5 py-1.5 font-medium text-amber-800">
+              {DIFFICULTY_LABEL[difficulty]}
+            </span>
+            {mins != null && (
+              <span className="inline-flex items-center gap-1 rounded-lg bg-stone-100 px-2.5 py-1.5">
+                <Clock className="h-3.5 w-3.5" />
+                {mins} min
+              </span>
+            )}
+            {item.servings != null && (
+              <span className="inline-flex items-center gap-1 rounded-lg bg-stone-100 px-2.5 py-1.5">
+                <Users className="h-3.5 w-3.5" />
+                {item.servings} raciones
+              </span>
+            )}
+          </div>
+
+          {(item.tags?.length ?? 0) > 0 && (
+            <div className="mt-3 flex flex-wrap gap-1.5">
+              {item.tags!.map((t) => (
+                <span
+                  key={t}
+                  className="rounded-md bg-teal-50 px-2 py-0.5 text-[11px] text-teal-800"
+                >
+                  {t}
+                </span>
+              ))}
+            </div>
+          )}
+
+          <h4 className="mt-6 text-sm font-semibold text-stone-800">
+            Ingredientes
+          </h4>
+          <ul className="mt-2 space-y-1.5 text-sm text-stone-600">
+            {ingredients.map((ing, i) => (
+              <li key={i} className="flex gap-2">
+                <span className="mt-2 h-1 w-1 shrink-0 rounded-full bg-amber-500" />
+                <span>{formatIngredient(ing)}</span>
+              </li>
+            ))}
+          </ul>
+
+          <h4 className="mt-6 text-sm font-semibold text-stone-800">Pasos</h4>
+          <ol className="mt-2 space-y-3">
+            {item.steps.map((s, i) => (
+              <li key={i} className="flex gap-3 text-sm text-stone-700">
+                <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-navy text-[11px] font-semibold text-white">
+                  {i + 1}
+                </span>
+                <span className="pt-0.5 leading-relaxed">{s}</span>
+              </li>
+            ))}
+          </ol>
+
+          {item.kind === "recipe" && onRemoveRecipe && (
+            <Button
+              className="mt-6 w-full"
+              variant="secondary"
+              onClick={onRemoveRecipe}
+            >
+              Quitar de favoritos
+            </Button>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ShoppingPanel({
+  shopping,
+  orderedShopping,
+  shoppingTotals,
+  checked,
+  savingPrice,
+  onClose,
+  onReset,
+  onToggle,
+  onSavePrice,
+  setShopping,
+}: {
+  shopping: ShoppingItem[];
+  orderedShopping: ShoppingItem[];
+  shoppingTotals: { estimatedTotal: number; pricedCount: number; done: number };
+  checked: Set<string>;
+  savingPrice: string | null;
+  onClose: () => void;
+  onReset: () => void;
+  onToggle: (name: string) => void;
+  onSavePrice: (name: string, unitPrice: number) => void;
+  setShopping: React.Dispatch<React.SetStateAction<ShoppingItem[] | null>>;
+}) {
+  return (
+    <section className="rounded-2xl border border-amber-100 bg-amber-50/50 p-5">
+      <div className="mb-3 flex flex-wrap items-end justify-between gap-2">
+        <div>
+          <h2 className="font-display text-lg font-semibold text-stone-900">
+            Lista de la compra
+          </h2>
+          <p className="text-xs text-stone-500">
+            Toca para marcar · se guarda en este móvil
+          </p>
+        </div>
+        <div className="flex items-center gap-3">
+          {shoppingTotals.done > 0 && (
+            <button
+              type="button"
+              className="text-sm text-stone-500 underline"
+              onClick={onReset}
+            >
+              Reiniciar
+            </button>
+          )}
+          <button
+            type="button"
+            className="text-sm text-stone-500 underline"
+            onClick={onClose}
+          >
+            Cerrar
+          </button>
+        </div>
+      </div>
+
+      {shopping.length === 0 ? (
+        <p className="text-sm text-stone-500">Sin ingredientes</p>
+      ) : (
+        <>
+          <div className="mb-3 flex items-center justify-between rounded-xl bg-white/70 px-3 py-2 text-sm">
+            <span className="font-medium text-stone-800">
+              {shoppingTotals.done}/{shopping.length} en el carro
+            </span>
+            <div className="h-1.5 w-24 overflow-hidden rounded-full bg-stone-200">
+              <div
+                className="h-full rounded-full bg-teal transition-all"
+                style={{
+                  width: `${
+                    shopping.length
+                      ? (shoppingTotals.done / shopping.length) * 100
+                      : 0
+                  }%`,
+                }}
+              />
+            </div>
+          </div>
+
+          <ul className="space-y-2">
+            {orderedShopping.map((item) => {
+              const done = checked.has(item.name);
+              return (
+                <li
+                  key={item.name}
+                  className={cn(
+                    "flex items-center gap-3 rounded-xl bg-white/80 px-3 py-3 text-sm text-stone-700",
+                    done && "opacity-55"
+                  )}
+                >
+                  <button
+                    type="button"
+                    onClick={() => onToggle(item.name)}
+                    aria-pressed={done}
+                    className={cn(
+                      "flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border-2 transition",
+                      done
+                        ? "border-teal bg-teal text-white"
+                        : "border-stone-300 bg-white text-transparent active:border-teal"
+                    )}
+                  >
+                    <Check className="h-5 w-5" strokeWidth={3} />
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => onToggle(item.name)}
+                    className="min-w-0 flex-1 text-left"
+                  >
+                    <p
+                      className={cn(
+                        "font-medium text-stone-900",
+                        done && "line-through decoration-stone-400"
+                      )}
+                    >
+                      {item.name}
+                    </p>
+                    <p className="text-xs text-stone-400">
+                      {item.totalQty
+                        ? item.totalQty
+                        : item.quantities.length > 0
+                          ? item.quantities.join(" + ")
+                          : item.count > 1
+                            ? `×${item.count}`
+                            : "—"}
+                    </p>
+                  </button>
+
+                  <div className="flex shrink-0 items-center gap-1">
+                    <span className="text-xs text-stone-400">€</span>
+                    <input
+                      type="number"
+                      inputMode="decimal"
+                      min={0}
+                      step={0.1}
+                      className="h-9 w-16 rounded-lg border border-stone-200 bg-white px-2 text-right text-sm"
+                      value={item.unitPrice ?? ""}
+                      placeholder="—"
+                      disabled={savingPrice === item.name}
+                      onChange={(e) => {
+                        const raw = e.target.value;
+                        const value = raw === "" ? null : parseFloat(raw);
+                        setShopping((prev) =>
+                          prev
+                            ? prev.map((row) =>
+                                row.name === item.name
+                                  ? {
+                                      ...row,
+                                      unitPrice:
+                                        value != null && !Number.isNaN(value)
+                                          ? value
+                                          : null,
+                                    }
+                                  : row
+                              )
+                            : prev
+                        );
+                      }}
+                      onBlur={(e) => {
+                        const value = parseFloat(e.target.value);
+                        if (!Number.isNaN(value) && value >= 0) {
+                          void onSavePrice(item.name, value);
+                        }
+                      }}
+                    />
+                  </div>
+                </li>
+              );
+            })}
+          </ul>
+
+          <div className="mt-4 flex items-center justify-between rounded-xl border border-amber-200 bg-white px-4 py-3">
+            <div>
+              <p className="text-xs font-medium uppercase tracking-wider text-amber-700/80">
+                Total estimado
+              </p>
+              <p className="text-xs text-stone-400">
+                {shoppingTotals.pricedCount}/{shopping.length} con precio
+              </p>
+            </div>
+            <p className="font-display text-2xl font-semibold text-navy">
+              {shoppingTotals.estimatedTotal.toLocaleString("es-ES", {
+                style: "currency",
+                currency: "EUR",
+              })}
+            </p>
+          </div>
+        </>
+      )}
+    </section>
   );
 }

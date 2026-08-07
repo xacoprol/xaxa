@@ -54,18 +54,22 @@ Abre [http://localhost:3000](http://localhost:3000).
 2. El admin recibe categorías de gasto por defecto.
 3. **Dashboard**: gasto del mes, menú de hoy, pendiente de hipoteca.
 4. **Gastos**: CRUD, reparto %, balance “quién debe a quién”, gráfico Recharts, export CSV.
-5. **Menús**: preferencias → generar semana (OpenAI) → regenerar un día → favoritos → lista de la compra.
+5. **Menús**: preferencias → generar semana (OpenAI + fotos) → regenerar un día → favoritos persistentes → lista de la compra.
 6. **Hipoteca**: timeline + adjuntos en Storage + ficha fija editable.
 
 ## Notas Supabase Storage
 
-Bucket recomendado: `mortgage-attachments`.
+Buckets recomendados:
 
-Política mínima (público de lectura, auth de escritura) — ajústala a tu seguridad:
+- `mortgage-attachments` — adjuntos de hipoteca
+- `meal-images` — fotos de platos generadas por IA
+
+Política mínima (público de lectura, auth/service de escritura) — ajústala a tu seguridad:
 
 ```sql
 -- Ejemplo orientativo; revisa RLS en tu proyecto
 insert into storage.buckets (id, name, public) values ('mortgage-attachments', 'mortgage-attachments', true);
+insert into storage.buckets (id, name, public) values ('meal-images', 'meal-images', true);
 ```
 
 ## Scripts
