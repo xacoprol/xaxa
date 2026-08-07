@@ -83,10 +83,18 @@ function resolveMealPlan(avgMeals: number): {
   };
 }
 
+export type MealSlotReplace = {
+  dayOfWeek: number;
+  mealType: "DESAYUNO" | "COMIDA" | "CENA";
+  avoidName?: string;
+  otherMealNames?: string[];
+};
+
 function buildPrompt(
   prefs: PreferenceInput[],
   days?: number[],
-  favoriteNames: string[] = []
+  favoriteNames: string[] = [],
+  replace?: MealSlotReplace
 ) {
   const prefsBlock = prefs
     .map(
@@ -105,7 +113,6 @@ function buildPrompt(
       : 14;
 
   const plan = resolveMealPlan(avgMeals);
-  const dayFilter = plan.dayFilterText(days);
   const mealTypeUnion = plan.types.map((t) => `"${t}"`).join(" | ");
 
   const favoritesBlock =
@@ -115,6 +122,23 @@ function buildPrompt(
           .join(", ")}.`
       : "";
 
+  const dayFilter = replace
+    ? `Genera EXACTAMENTE 1 plato: dayOfWeek=${replace.dayOfWeek} (0=lunes…6=domingo), mealType="${replace.mealType}". Nada más.`
+    : plan.dayFilterText(days);
+
+  const avoidBlock = replace
+    ? [
+        replace.avoidName
+          ? `NO generes el plato «${replace.avoidName}» ni una variante casi idéntica; propón algo claramente distinto.`
+          : "",
+        replace.otherMealNames?.length
+          ? `No repitas estos platos ya previstos en la semana: ${replace.otherMealNames.join(", ")}.`
+          : "",
+      ]
+        .filter(Boolean)
+        .join("\n")
+    : "";
+
   return `Eres un chef familiar mediterráneo/español. Diseña un menú semanal casero, apetitoso y realista en español.
 
 Preferencias de los miembros:
@@ -122,6 +146,7 @@ ${prefsBlock}
 
 ${dayFilter}
 ${favoritesBlock}
+${avoidBlock}
 
 Responde ÚNICAMENTE con JSON válido (sin markdown) con esta forma:
 {
@@ -153,7 +178,8 @@ Reglas estrictas:
 - Variedad a lo largo de la semana (no repetir el mismo plato).
 - estimatedMins ≈ prepMins + cookMins.
 - DESAYUNO (si aplica): práctico y rápido (≤20 min), apto para mañana.
-- Solo usa estos mealType: ${plan.types.join(", ")}.`;
+- Solo usa estos mealType: ${plan.types.join(", ")}.
+${replace ? `- El array "meals" debe tener exactamente 1 elemento con dayOfWeek=${replace.dayOfWeek} y mealType="${replace.mealType}".` : ""}`;
 }
 
 function extractJson(text: string) {
@@ -166,7 +192,8 @@ function extractJson(text: string) {
 export async function generateWeeklyMeals(
   prefs: PreferenceInput[],
   days?: number[],
-  favoriteNames: string[] = []
+  favoriteNames: string[] = [],
+  replace?: MealSlotReplace
 ): Promise<GeneratedMeal[]> {
   const apiKey = process.env.OPENAI_API_KEY;
   if (!apiKey) {
@@ -176,7 +203,7 @@ export async function generateWeeklyMeals(
   const openai = new OpenAI({ apiKey });
   const completion = await openai.chat.completions.create({
     model: "gpt-4o-mini",
-    temperature: 0.75,
+    temperature: 0.85,
     response_format: { type: "json_object" },
     messages: [
       {
@@ -186,7 +213,7 @@ export async function generateWeeklyMeals(
       },
       {
         role: "user",
-        content: buildPrompt(prefs, days, favoriteNames),
+        content: buildPrompt(prefs, days, favoriteNames, replace),
       },
     ],
   });
@@ -199,7 +226,7 @@ export async function generateWeeklyMeals(
     throw new Error("No se pudo parsear el menú generado");
   }
 
-  return parsed.data.meals.map((m) => {
+  let meals = parsed.data.meals.map((m) => {
     const prep = m.prepMins ?? null;
     const cook = m.cookMins ?? null;
     const estimated =
@@ -214,6 +241,24 @@ export async function generateWeeklyMeals(
       estimatedMins: estimated,
     };
   });
+
+  if (replace) {
+    const hit =
+      meals.find(
+        (m) =>
+          m.dayOfWeek === replace.dayOfWeek && m.mealType === replace.mealType
+      ) ?? meals[0];
+    if (!hit) throw new Error("No se generó el plato sustituto");
+    meals = [
+      {
+        ...hit,
+        dayOfWeek: replace.dayOfWeek,
+        mealType: replace.mealType,
+      },
+    ];
+  }
+
+  return meals;
 }
 
 export type ShoppingItem = {

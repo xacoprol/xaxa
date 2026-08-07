@@ -35,3 +35,35 @@ body {
     padding-bottom: env(safe-area-inset-bottom);
   }
 }
+
+/* Splash: entra ya girando → para → gira → para… */
+@keyframes splash-x-twirl {
+  0% {
+    transform: rotate(-200deg);
+  }
+  18% {
+    transform: rotate(0deg);
+  }
+  18%,
+  48% {
+    transform: rotate(0deg);
+  }
+  66% {
+    transform: rotate(360deg);
+  }
+  66%,
+  100% {
+    transform: rotate(360deg);
+  }
+}
+
+.splash-x-spin {
+  animation: splash-x-twirl 2.4s cubic-bezier(0.4, 0.05, 0.2, 1) infinite;
+  will-change: transform;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .splash-x-spin {
+    animation: none;
+  }
+}

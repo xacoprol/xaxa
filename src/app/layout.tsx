@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import { Figtree, Fraunces } from "next/font/google";
+import { AppSplash } from "@/components/brand/app-splash";
 import { PwaRegister } from "@/components/pwa/register";
 import "./globals.css";
 
@@ -66,6 +67,7 @@ export default function RootLayout({
   return (
     <html lang="es" className={`${figtree.variable} ${fraunces.variable}`}>
       <body className="min-h-dvh font-sans antialiased overscroll-none">
+        <AppSplash />
         {children}
         <PwaRegister />
       </body>

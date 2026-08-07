@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { FormEvent, useState } from "react";
+import { FormEvent, useEffect, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { AuthShell } from "@/components/auth/auth-shell";
 import { Button } from "@/components/ui/button";
@@ -14,6 +14,26 @@ export default function LoginPage() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [showRegister, setShowRegister] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch("/api/auth/can-register");
+        const data = await res.json();
+        // Con límite a 2 usuarios activo, no mostrar alta pública
+        if (!cancelled) {
+          setShowRegister(data.limitTwoUsers !== true);
+        }
+      } catch {
+        if (!cancelled) setShowRegister(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   async function onSubmit(e: FormEvent) {
     e.preventDefault();
@@ -74,12 +94,14 @@ export default function LoginPage() {
           ¿Olvidaste la contraseña?
         </Link>
       </p>
-      <p className="mt-4 text-center text-sm text-stone-500">
-        ¿No tienes cuenta?{" "}
-        <Link href="/register" className="font-medium text-navy underline">
-          Regístrate
-        </Link>
-      </p>
+      {showRegister && (
+        <p className="mt-4 text-center text-sm text-stone-500">
+          ¿No tienes cuenta?{" "}
+          <Link href="/register" className="font-medium text-navy underline">
+            Regístrate
+          </Link>
+        </p>
+      )}
     </AuthShell>
   );
 }

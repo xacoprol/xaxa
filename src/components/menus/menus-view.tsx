@@ -160,6 +160,8 @@ export function MenusView({
   const [recipes, setRecipes] = useState<Recipe[] | null>(null);
   const [loadingRecipes, setLoadingRecipes] = useState(false);
   const [confirmGenerate, setConfirmGenerate] = useState(false);
+  const [confirmReplace, setConfirmReplace] = useState<Meal | null>(null);
+  const [regenMealId, setRegenMealId] = useState<string | null>(null);
   const [prefsOpen, setPrefsOpen] = useState(false);
   const [photoLoadingId, setPhotoLoadingId] = useState<string | null>(null);
   const [ticketReview, setTicketReview] = useState<TicketReview | null>(null);
@@ -289,6 +291,41 @@ export function MenusView({
       ? nextMeals.filter((m) => days.includes(m.dayOfWeek)).map((m) => m.id)
       : nextMeals.map((m) => m.id);
     void fillImages(ids);
+  }
+
+  async function replaceMeal(meal: Meal) {
+    setError(null);
+    setRegenMealId(meal.id);
+    setConfirmReplace(null);
+
+    const res = await fetch("/api/menus/generate", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ weekStart: weekStartIso, mealId: meal.id }),
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      setError(data.error ?? "Error al sustituir el plato");
+      setRegenMealId(null);
+      return;
+    }
+
+    const nextMeals = (data.menu?.meals ?? []) as Meal[];
+    setMeals(nextMeals);
+    setRegenMealId(null);
+
+    const replacement = nextMeals.find(
+      (m) =>
+        m.dayOfWeek === meal.dayOfWeek && m.mealType === meal.mealType
+    );
+    if (replacement) {
+      setSelected({ kind: "meal", ...replacement });
+    } else {
+      setSelected(null);
+    }
+
+    router.refresh();
+    if (replacement) void fillImages([replacement.id]);
   }
 
   async function toggleFavorite(id: string) {
@@ -630,40 +667,54 @@ export function MenusView({
                 </div>
                 <div
                   className={cn(
-                    "grid gap-3",
+                    // Móvil: carrusel a sangre por la derecha, peek del siguiente
+                    "-mr-4 flex gap-3 overflow-x-auto scroll-smooth pb-1 pr-4",
+                    "snap-x snap-mandatory [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden",
+                    // Desktop: rejilla normal
+                    "sm:mr-0 sm:grid sm:gap-3 sm:overflow-visible sm:pb-0 sm:pr-0 sm:snap-none",
                     showBreakfast ? "sm:grid-cols-3" : "sm:grid-cols-2"
                   )}
                 >
-                  {showBreakfast && (
-                    <MealCard
-                      label="Desayuno"
-                      meal={desayuno}
-                      onOpen={(m) => setSelected({ kind: "meal", ...m })}
-                      onFavorite={toggleFavorite}
-                      onGeneratePhoto={generatePhoto}
-                      photoLoading={
-                        !!desayuno && photoLoadingId === desayuno.id
-                      }
-                    />
-                  )}
-                  <MealCard
-                    label="Comida"
-                    meal={comida}
-                    onOpen={(m) => setSelected({ kind: "meal", ...m })}
-                    onFavorite={toggleFavorite}
-                    onGeneratePhoto={generatePhoto}
-                    photoLoading={
-                      !!comida && photoLoadingId === comida.id
-                    }
-                  />
-                  <MealCard
-                    label="Cena"
-                    meal={cena}
-                    onOpen={(m) => setSelected({ kind: "meal", ...m })}
-                    onFavorite={toggleFavorite}
-                    onGeneratePhoto={generatePhoto}
-                    photoLoading={!!cena && photoLoadingId === cena.id}
-                  />
+                  {(
+                    [
+                      showBreakfast
+                        ? {
+                            key: "desayuno",
+                            label: "Desayuno",
+                            meal: desayuno,
+                          }
+                        : null,
+                      { key: "comida", label: "Comida", meal: comida },
+                      { key: "cena", label: "Cena", meal: cena },
+                    ] as const
+                  )
+                    .filter(
+                      (s): s is NonNullable<typeof s> => s != null
+                    )
+                    .map((slot) => (
+                      <div
+                        key={slot.key}
+                        className="w-[78%] max-w-[17.5rem] shrink-0 snap-start sm:w-auto sm:max-w-none sm:shrink"
+                      >
+                        <MealCard
+                          label={slot.label}
+                          meal={slot.meal}
+                          onOpen={(m) =>
+                            setSelected({ kind: "meal", ...m })
+                          }
+                          onFavorite={toggleFavorite}
+                          onReplace={(m) => setConfirmReplace(m)}
+                          replaceLoading={
+                            !!slot.meal && regenMealId === slot.meal.id
+                          }
+                          onGeneratePhoto={generatePhoto}
+                          photoLoading={
+                            !!slot.meal && photoLoadingId === slot.meal.id
+                          }
+                          disabled={generating || regenMealId != null}
+                        />
+                      </div>
+                    ))}
                 </div>
               </section>
             );
@@ -953,6 +1004,14 @@ export function MenusView({
               ? () => removeRecipe(selected.id)
               : undefined
           }
+          onReplace={
+            selected.kind === "meal"
+              ? () => setConfirmReplace(selected)
+              : undefined
+          }
+          replaceLoading={
+            selected.kind === "meal" && regenMealId === selected.id
+          }
           onGeneratePhoto={
             selected.kind === "meal"
               ? () => generatePhoto(selected.id)
@@ -998,6 +1057,43 @@ export function MenusView({
               >
                 <Sparkles className="h-4 w-4" />
                 Sí, generar
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {confirmReplace && (
+        <div
+          className="fixed inset-0 z-[60] flex items-end justify-center bg-stone-900/45 p-4 sm:items-center"
+          onClick={() => !regenMealId && setConfirmReplace(null)}
+        >
+          <div
+            className="w-full max-w-sm rounded-2xl bg-white p-5 shadow-xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h3 className="font-display text-xl font-semibold text-stone-900">
+              ¿Sustituir este plato?
+            </h3>
+            <p className="mt-2 text-sm leading-relaxed text-stone-600">
+              Se sustituirá «{confirmReplace.name}» por otro nuevo (incluida la
+              foto). El resto del menú no cambia.
+            </p>
+            <div className="mt-5 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+              <Button
+                variant="secondary"
+                disabled={!!regenMealId}
+                onClick={() => setConfirmReplace(null)}
+              >
+                Cancelar
+              </Button>
+              <Button
+                variant="amber"
+                loading={regenMealId === confirmReplace.id}
+                onClick={() => void replaceMeal(confirmReplace)}
+              >
+                <RefreshCw className="h-4 w-4" />
+                Sí, sustituir
               </Button>
             </div>
           </div>
@@ -1067,15 +1163,21 @@ function MealCard({
   meal,
   onOpen,
   onFavorite,
+  onReplace,
+  replaceLoading,
   onGeneratePhoto,
   photoLoading,
+  disabled,
 }: {
   label: string;
   meal?: Meal;
   onOpen: (m: Meal) => void;
   onFavorite: (id: string) => void;
+  onReplace: (m: Meal) => void;
+  replaceLoading?: boolean;
   onGeneratePhoto: (id: string) => void;
   photoLoading?: boolean;
+  disabled?: boolean;
 }) {
   if (!meal) {
     return (
@@ -1135,7 +1237,7 @@ function MealCard({
             <button
               type="button"
               onClick={() => onGeneratePhoto(meal.id)}
-              disabled={photoLoading}
+              disabled={photoLoading || disabled}
               className="rounded-lg p-1.5 text-amber-700 hover:bg-amber-50 disabled:opacity-50"
               aria-label="Generar foto"
               title="Generar foto"
@@ -1145,6 +1247,18 @@ function MealCard({
               />
             </button>
           )}
+          <button
+            type="button"
+            onClick={() => onReplace(meal)}
+            disabled={disabled || replaceLoading}
+            className="rounded-lg p-1.5 text-stone-400 hover:bg-amber-50 hover:text-amber-800 disabled:opacity-50"
+            aria-label="Cambiar plato"
+            title="Cambiar plato"
+          >
+            <RefreshCw
+              className={cn("h-4 w-4", replaceLoading && "animate-spin")}
+            />
+          </button>
           <button
             type="button"
             onClick={() => onFavorite(meal.id)}
@@ -1171,6 +1285,8 @@ function RecipeSheet({
   onClose,
   onFavorite,
   onRemoveRecipe,
+  onReplace,
+  replaceLoading,
   onGeneratePhoto,
   photoLoading,
 }: {
@@ -1178,6 +1294,8 @@ function RecipeSheet({
   onClose: () => void;
   onFavorite?: () => void;
   onRemoveRecipe?: () => void;
+  onReplace?: () => void;
+  replaceLoading?: boolean;
   onGeneratePhoto?: () => void;
   photoLoading?: boolean;
 }) {
@@ -1226,22 +1344,38 @@ function RecipeSheet({
                 </p>
               )}
             </div>
-            {item.kind === "meal" && onFavorite && (
-              <button
-                type="button"
-                onClick={onFavorite}
-                className="shrink-0 rounded-xl p-2 hover:bg-amber-50"
-              >
-                <Heart
-                  className={cn(
-                    "h-5 w-5",
-                    item.isFavorite
-                      ? "fill-amber-500 text-amber-500"
-                      : "text-stone-300"
-                  )}
-                />
-              </button>
-            )}
+            <div className="flex shrink-0 gap-1">
+              {item.kind === "meal" && onReplace && (
+                <button
+                  type="button"
+                  onClick={onReplace}
+                  disabled={replaceLoading}
+                  className="rounded-xl p-2 text-stone-500 hover:bg-amber-50 hover:text-amber-800 disabled:opacity-50"
+                  aria-label="Cambiar plato"
+                  title="Cambiar plato"
+                >
+                  <RefreshCw
+                    className={cn("h-5 w-5", replaceLoading && "animate-spin")}
+                  />
+                </button>
+              )}
+              {item.kind === "meal" && onFavorite && (
+                <button
+                  type="button"
+                  onClick={onFavorite}
+                  className="rounded-xl p-2 hover:bg-amber-50"
+                >
+                  <Heart
+                    className={cn(
+                      "h-5 w-5",
+                      item.isFavorite
+                        ? "fill-amber-500 text-amber-500"
+                        : "text-stone-300"
+                    )}
+                  />
+                </button>
+              )}
+            </div>
           </div>
 
           <div className="mt-4 flex flex-wrap gap-3 text-xs text-stone-600">
@@ -1298,6 +1432,18 @@ function RecipeSheet({
               </li>
             ))}
           </ol>
+
+          {item.kind === "meal" && onReplace && (
+            <Button
+              className="mt-6 w-full"
+              variant="secondary"
+              loading={replaceLoading}
+              onClick={onReplace}
+            >
+              <RefreshCw className="h-4 w-4" />
+              Cambiar este plato
+            </Button>
+          )}
 
           {item.kind === "recipe" && onRemoveRecipe && (
             <Button
