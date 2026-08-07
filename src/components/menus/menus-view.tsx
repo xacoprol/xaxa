@@ -359,6 +359,16 @@ export function MenusView({
         </div>
         <div className="flex flex-wrap gap-2">
           <Button
+            variant={tab === "semana" ? "amber" : "secondary"}
+            size="sm"
+            onClick={() => {
+              setTab("semana");
+              setShopping(null);
+            }}
+          >
+            Semana
+          </Button>
+          <Button
             variant={tab === "preferencias" ? "amber" : "secondary"}
             size="sm"
             onClick={() => {
@@ -411,48 +421,6 @@ export function MenusView({
           </Button>
         </div>
       </header>
-
-      <div className="flex flex-wrap gap-2 border-b border-stone-200 pb-2">
-        <button
-          type="button"
-          onClick={() => setTab("semana")}
-          className={cn(
-            "rounded-lg px-3 py-1.5 text-sm font-medium transition",
-            tab === "semana"
-              ? "bg-amber-50 text-amber-800"
-              : "text-stone-500 hover:text-stone-800"
-          )}
-        >
-          Esta semana
-        </button>
-        <button
-          type="button"
-          onClick={() => {
-            setTab("favoritos");
-            void loadRecipes();
-          }}
-          className={cn(
-            "rounded-lg px-3 py-1.5 text-sm font-medium transition",
-            tab === "favoritos"
-              ? "bg-amber-50 text-amber-800"
-              : "text-stone-500 hover:text-stone-800"
-          )}
-        >
-          Favoritos
-        </button>
-        <button
-          type="button"
-          onClick={() => setTab("preferencias")}
-          className={cn(
-            "rounded-lg px-3 py-1.5 text-sm font-medium transition",
-            tab === "preferencias"
-              ? "bg-amber-50 text-amber-800"
-              : "text-stone-500 hover:text-stone-800"
-          )}
-        >
-          Preferencias
-        </button>
-      </div>
 
       {error && (
         <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">
