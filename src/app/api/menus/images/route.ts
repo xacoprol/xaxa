@@ -14,6 +14,8 @@ export async function POST(request: Request) {
   const schema = z.object({
     mealIds: z.array(z.string()).optional(),
     limit: z.number().int().min(1).max(6).optional(),
+    /** Regenerar aunque ya tenga imageUrl */
+    force: z.boolean().optional(),
   });
   const body = schema.safeParse(await request.json().catch(() => ({})));
   if (!body.success) {
@@ -21,16 +23,18 @@ export async function POST(request: Request) {
   }
 
   const limit = body.data.limit ?? 2;
+  const force = body.data.force === true && !!body.data.mealIds?.length;
+
   const meals = await prisma.meal.findMany({
     where: {
       weeklyMenu: { householdId: ctx.household.id },
-      imageUrl: null,
+      ...(force ? {} : { imageUrl: null }),
       ...(body.data.mealIds?.length
         ? { id: { in: body.data.mealIds } }
         : {}),
     },
     orderBy: [{ dayOfWeek: "asc" }, { mealType: "asc" }],
-    take: limit,
+    take: force ? Math.min(limit, body.data.mealIds!.length) : limit,
   });
 
   const updated: { id: string; imageUrl: string }[] = [];

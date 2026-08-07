@@ -6,6 +6,7 @@ import {
   Check,
   Clock,
   Heart,
+  ImagePlus,
   RefreshCw,
   ShoppingCart,
   Sparkles,
@@ -146,6 +147,7 @@ export function MenusView({
   const [loadingRecipes, setLoadingRecipes] = useState(false);
   const [confirmGenerate, setConfirmGenerate] = useState(false);
   const [prefsOpen, setPrefsOpen] = useState(false);
+  const [photoLoadingId, setPhotoLoadingId] = useState<string | null>(null);
 
   useEffect(() => {
     setMeals(initialMeals);
@@ -333,6 +335,46 @@ export function MenusView({
     setLoadingRecipes(false);
   }
 
+  async function generatePhoto(mealId: string) {
+    setPhotoLoadingId(mealId);
+    setError(null);
+    try {
+      const res = await fetch("/api/menus/images", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          mealIds: [mealId],
+          limit: 1,
+          force: true,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setError(data.error ?? "No se pudo generar la foto");
+        return;
+      }
+      const hit = data.updated?.[0] as
+        | { id: string; imageUrl: string }
+        | undefined;
+      if (hit) {
+        setMeals((prev) =>
+          prev.map((m) =>
+            m.id === hit.id ? { ...m, imageUrl: hit.imageUrl } : m
+          )
+        );
+        setSelected((prev) =>
+          prev && prev.kind === "meal" && prev.id === hit.id
+            ? { ...prev, imageUrl: hit.imageUrl }
+            : prev
+        );
+      } else {
+        setError("No se pudo generar la foto. Inténtalo de nuevo.");
+      }
+    } finally {
+      setPhotoLoadingId(null);
+    }
+  }
+
   async function removeRecipe(id: string) {
     await fetch(`/api/menus/recipes?id=${id}`, { method: "DELETE" });
     setRecipes((prev) => (prev ? prev.filter((r) => r.id !== id) : prev));
@@ -463,12 +505,18 @@ export function MenusView({
                     meal={comida}
                     onOpen={(m) => setSelected({ kind: "meal", ...m })}
                     onFavorite={toggleFavorite}
+                    onGeneratePhoto={generatePhoto}
+                    photoLoading={
+                      !!comida && photoLoadingId === comida.id
+                    }
                   />
                   <MealCard
                     label="Cena"
                     meal={cena}
                     onOpen={(m) => setSelected({ kind: "meal", ...m })}
                     onFavorite={toggleFavorite}
+                    onGeneratePhoto={generatePhoto}
+                    photoLoading={!!cena && photoLoadingId === cena.id}
                   />
                 </div>
               </section>
@@ -580,6 +628,14 @@ export function MenusView({
               ? () => removeRecipe(selected.id)
               : undefined
           }
+          onGeneratePhoto={
+            selected.kind === "meal"
+              ? () => generatePhoto(selected.id)
+              : undefined
+          }
+          photoLoading={
+            selected.kind === "meal" && photoLoadingId === selected.id
+          }
         />
       )}
 
@@ -630,10 +686,14 @@ function MealPhoto({
   src,
   alt,
   className,
+  onGenerate,
+  generating,
 }: {
   src?: string | null;
   alt: string;
   className?: string;
+  onGenerate?: () => void;
+  generating?: boolean;
 }) {
   return (
     <div
@@ -651,10 +711,26 @@ function MealPhoto({
           loading="lazy"
         />
       ) : (
-        <div className="absolute inset-0 flex items-center justify-center">
+        <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 px-3">
           <span className="text-xs font-medium uppercase tracking-wider text-amber-700/50">
             Sin foto
           </span>
+          {onGenerate && (
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                onGenerate();
+              }}
+              disabled={generating}
+              className="inline-flex items-center gap-1.5 rounded-full bg-white/90 px-3 py-1.5 text-xs font-medium text-amber-900 shadow-sm ring-1 ring-amber-200/80 transition hover:bg-white disabled:opacity-60"
+            >
+              <ImagePlus
+                className={cn("h-3.5 w-3.5", generating && "animate-pulse")}
+              />
+              {generating ? "Generando…" : "Generar foto"}
+            </button>
+          )}
         </div>
       )}
     </div>
@@ -666,11 +742,15 @@ function MealCard({
   meal,
   onOpen,
   onFavorite,
+  onGeneratePhoto,
+  photoLoading,
 }: {
   label: string;
   meal?: Meal;
   onOpen: (m: Meal) => void;
   onFavorite: (id: string) => void;
+  onGeneratePhoto: (id: string) => void;
+  photoLoading?: boolean;
 }) {
   if (!meal) {
     return (
@@ -688,20 +768,27 @@ function MealCard({
 
   const mins = meal.estimatedMins;
   const difficulty = meal.difficulty ?? "MEDIA";
+  const missingPhoto = !meal.imageUrl;
 
   return (
     <div className="group overflow-hidden rounded-2xl border border-stone-200/80 bg-white shadow-soft">
-      <button
-        type="button"
-        onClick={() => onOpen(meal)}
-        className="block w-full text-left"
-      >
-        <MealPhoto
-          src={meal.imageUrl}
-          alt={meal.name}
-          className="aspect-[4/3] w-full"
-        />
-      </button>
+      <div className="relative">
+        <button
+          type="button"
+          onClick={() => onOpen(meal)}
+          className="block w-full text-left"
+        >
+          <MealPhoto
+            src={meal.imageUrl}
+            alt={meal.name}
+            className="aspect-[4/3] w-full"
+            onGenerate={
+              missingPhoto ? () => onGeneratePhoto(meal.id) : undefined
+            }
+            generating={photoLoading}
+          />
+        </button>
+      </div>
       <div className="flex items-start gap-2 p-3">
         <button
           type="button"
@@ -718,21 +805,37 @@ function MealCard({
             {meal.servings != null && <span>· {meal.servings} raciones</span>}
           </p>
         </button>
-        <button
-          type="button"
-          onClick={() => onFavorite(meal.id)}
-          className="shrink-0 rounded-lg p-1.5 hover:bg-amber-50"
-          aria-label="Favorito"
-        >
-          <Heart
-            className={cn(
-              "h-4 w-4",
-              meal.isFavorite
-                ? "fill-amber-500 text-amber-500"
-                : "text-stone-300"
-            )}
-          />
-        </button>
+        <div className="flex shrink-0 flex-col gap-1">
+          {missingPhoto && (
+            <button
+              type="button"
+              onClick={() => onGeneratePhoto(meal.id)}
+              disabled={photoLoading}
+              className="rounded-lg p-1.5 text-amber-700 hover:bg-amber-50 disabled:opacity-50"
+              aria-label="Generar foto"
+              title="Generar foto"
+            >
+              <ImagePlus
+                className={cn("h-4 w-4", photoLoading && "animate-pulse")}
+              />
+            </button>
+          )}
+          <button
+            type="button"
+            onClick={() => onFavorite(meal.id)}
+            className="rounded-lg p-1.5 hover:bg-amber-50"
+            aria-label="Favorito"
+          >
+            <Heart
+              className={cn(
+                "h-4 w-4",
+                meal.isFavorite
+                  ? "fill-amber-500 text-amber-500"
+                  : "text-stone-300"
+              )}
+            />
+          </button>
+        </div>
       </div>
     </div>
   );
@@ -743,11 +846,15 @@ function RecipeSheet({
   onClose,
   onFavorite,
   onRemoveRecipe,
+  onGeneratePhoto,
+  photoLoading,
 }: {
   item: DetailItem;
   onClose: () => void;
   onFavorite?: () => void;
   onRemoveRecipe?: () => void;
+  onGeneratePhoto?: () => void;
+  photoLoading?: boolean;
 }) {
   const difficulty = item.difficulty ?? "MEDIA";
   const mins = item.estimatedMins;
@@ -767,6 +874,10 @@ function RecipeSheet({
             src={item.imageUrl}
             alt={item.name}
             className="aspect-[16/10] w-full"
+            onGenerate={
+              !item.imageUrl && onGeneratePhoto ? onGeneratePhoto : undefined
+            }
+            generating={photoLoading}
           />
           <button
             type="button"
