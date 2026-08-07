@@ -74,30 +74,29 @@ export default function RegisterPage() {
       return;
     }
 
-    if (data.user) {
-      const sync = await fetch("/api/auth/sync-user", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name }),
-      });
-      if (!sync.ok) {
-        const syncData = await sync.json().catch(() => ({}));
-        setError(syncData.error ?? "No se pudo completar el registro");
-        setLoading(false);
-        return;
-      }
-    }
-
-    if (data.session) {
-      router.push("/onboarding");
-      router.refresh();
+    // Sin sesión = hay que confirmar email; el usuario se crea en /auth/callback
+    if (!data.session) {
+      setMessage(
+        "Revisa tu email para confirmar la cuenta. Después podrás iniciar sesión."
+      );
+      setLoading(false);
       return;
     }
 
-    setMessage(
-      "Revisa tu email para confirmar la cuenta. Después podrás iniciar sesión."
-    );
-    setLoading(false);
+    const sync = await fetch("/api/auth/sync-user", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name }),
+    });
+    if (!sync.ok) {
+      const syncData = await sync.json().catch(() => ({}));
+      setError(syncData.error ?? "No se pudo completar el registro");
+      setLoading(false);
+      return;
+    }
+
+    router.push("/onboarding");
+    router.refresh();
   }
 
   return (
@@ -106,9 +105,6 @@ export default function RegisterPage() {
         <div className="mb-8 flex flex-col items-center text-center">
           <BrandLogo size="lg" />
           <h1 className="mt-4 text-xl font-semibold text-navy">Crear cuenta</h1>
-          <p className="mt-1 text-sm text-stone-500">
-            Empieza a gestionar tu hogar
-          </p>
         </div>
         <div className="rounded-2xl border border-stone-200/80 bg-white p-6 shadow-soft">
           {checking ? (
