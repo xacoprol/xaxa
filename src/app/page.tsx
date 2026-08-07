@@ -20,10 +20,7 @@ export default async function HomePage() {
       />
       <main className="relative z-10 mx-auto flex w-full max-w-lg flex-1 flex-col justify-center px-6 py-16">
         <BrandLogo href={null} size="xl" />
-        <h1 className="font-display mt-6 text-4xl font-semibold tracking-tight text-navy sm:text-5xl">
-          X
-        </h1>
-        <p className="mt-3 max-w-sm text-lg text-stone-600 text-balance">
+        <p className="mt-6 max-w-sm text-lg text-stone-600 text-balance">
           El hogar, en orden. Gastos, menús e hipoteca para tu familia.
         </p>
         <div className="mt-10 flex flex-col gap-3 sm:flex-row">
