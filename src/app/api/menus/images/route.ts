@@ -46,22 +46,24 @@ export async function POST(request: Request) {
     });
   }
 
-  const updated: { id: string; imageUrl: string }[] = [];
+  const updated: { id: string; imageUrl: string; source: string }[] = [];
   const errors: string[] = [];
 
   for (const meal of meals) {
     try {
-      const imageUrl = await attachMealImage({
+      const { imageUrl, source } = await attachMealImage({
         householdId: ctx.household.id,
         mealId: meal.id,
         name: meal.name,
         tags: meal.tags,
+        // force = regenerar a mano → probar stock otra vez; si falla, IA
+        preferAi: false,
       });
       await prisma.meal.update({
         where: { id: meal.id },
         data: { imageUrl },
       });
-      updated.push({ id: meal.id, imageUrl });
+      updated.push({ id: meal.id, imageUrl, source });
     } catch (e) {
       const message = e instanceof Error ? e.message : "Error generando foto";
       console.error("[menus/images]", meal.id, message);

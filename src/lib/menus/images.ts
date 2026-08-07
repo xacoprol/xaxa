@@ -1,5 +1,6 @@
 import OpenAI from "openai";
 import { createClient as createSupabaseJs } from "@supabase/supabase-js";
+import { findStockMealImage } from "@/lib/menus/stock-images";
 
 export const MEAL_IMAGES_BUCKET = "meal-images";
 
@@ -29,7 +30,6 @@ export async function generateMealImageBuffer(
   const tagLine = tags.length ? ` Style: ${tags.slice(0, 4).join(", ")}.` : "";
   const prompt = `Professional food photography of "${dishName}", homemade Spanish/Mediterranean home cooking, plated appetizingly on a ceramic plate, natural daylight, shallow depth of field, no text, no watermark, no people.${tagLine}`;
 
-  // gpt-image-* (dall-e-3 ya no disponible en muchas cuentas)
   const result = await openai.images.generate({
     model: "gpt-image-1-mini",
     prompt,
@@ -56,14 +56,16 @@ export async function generateMealImageBuffer(
 export async function uploadMealImage(
   householdId: string,
   mealId: string,
-  buffer: Buffer
+  buffer: Buffer,
+  contentType: string = "image/jpeg"
 ): Promise<string> {
   const supabase = adminStorage();
-  const path = `${householdId}/${mealId}.png`;
+  const ext = contentType.includes("png") ? "png" : "jpg";
+  const path = `${householdId}/${mealId}.${ext}`;
   const { error } = await supabase.storage
     .from(MEAL_IMAGES_BUCKET)
     .upload(path, buffer, {
-      contentType: "image/png",
+      contentType,
       upsert: true,
     });
 
@@ -75,16 +77,46 @@ export async function uploadMealImage(
   if (!data.publicUrl) {
     throw new Error("No se pudo obtener la URL pública de la foto");
   }
-  return data.publicUrl;
+  // Cache-bust al regenerar
+  return `${data.publicUrl}?v=${Date.now()}`;
 }
 
-/** Generate + upload; throws on failure with a clear message. */
+/**
+ * Foto del plato: primero stock real online; si no hay, OpenAI.
+ * `preferAi` fuerza generación IA (p. ej. botón regenerar).
+ */
 export async function attachMealImage(opts: {
   householdId: string;
   mealId: string;
   name: string;
   tags?: string[];
-}): Promise<string> {
-  const buffer = await generateMealImageBuffer(opts.name, opts.tags ?? []);
-  return uploadMealImage(opts.householdId, opts.mealId, buffer);
+  preferAi?: boolean;
+}): Promise<{ imageUrl: string; source: "stock" | "openai" }> {
+  const tags = opts.tags ?? [];
+
+  if (!opts.preferAi) {
+    const stock = await findStockMealImage(opts.name, tags);
+    if (stock) {
+      console.info(
+        `[meal-image] stock/${stock.source}: ${opts.name}`
+      );
+      const imageUrl = await uploadMealImage(
+        opts.householdId,
+        opts.mealId,
+        stock.buffer,
+        "image/jpeg"
+      );
+      return { imageUrl, source: "stock" };
+    }
+  }
+
+  console.info(`[meal-image] openai: ${opts.name}`);
+  const buffer = await generateMealImageBuffer(opts.name, tags);
+  const imageUrl = await uploadMealImage(
+    opts.householdId,
+    opts.mealId,
+    buffer,
+    "image/png"
+  );
+  return { imageUrl, source: "openai" };
 }
