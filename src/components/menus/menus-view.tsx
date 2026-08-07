@@ -163,9 +163,38 @@ async function imageFileToJpeg(file: File): Promise<File> {
   return new File([blob], `${base}.jpg`, { type: "image/jpeg" });
 }
 
+function formatPriceInput(n: number): string {
+  return n.toLocaleString("es-ES", {
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 2,
+    useGrouping: false,
+  });
+}
+
+/** Acepta "4,50" / "4.50" / "4," mientras se escribe. */
+function parsePriceInput(raw: string): number | null {
+  const cleaned = raw.trim().replace(/\s/g, "").replace(",", ".");
+  if (cleaned === "" || cleaned === ".") return null;
+  if (!/^\d*\.?\d*$/.test(cleaned)) return null;
+  const n = Number.parseFloat(cleaned);
+  if (Number.isNaN(n) || n < 0) return null;
+  return Math.round(n * 100) / 100;
+}
+
+function sanitizePriceTyping(raw: string): string {
+  // Solo dígitos y una coma o punto decimal
+  let s = raw.replace(/[^\d.,]/g, "");
+  const sep = s.search(/[.,]/);
+  if (sep === -1) return s;
+  const head = s.slice(0, sep + 1).replace(/\./g, ",");
+  const tail = s.slice(sep + 1).replace(/[.,]/g, "");
+  return head + tail;
+}
+
 type TicketReviewItem = {
   name: string;
   suggestedPrice: number;
+  priceInput: string;
   priceUnit: "kg" | "l" | "ud";
   ticketNote: string | null;
   selected: boolean;
@@ -635,6 +664,7 @@ export function MenusView({
         items: items.map((i) => ({
           name: i.name,
           suggestedPrice: i.suggestedPrice,
+          priceInput: formatPriceInput(i.suggestedPrice),
           priceUnit:
             i.priceUnit === "kg" || i.priceUnit === "l" ? i.priceUnit : "ud",
           ticketNote: i.ticketNote ?? null,
@@ -653,11 +683,15 @@ export function MenusView({
     if (!ticketReview) return;
     const items = ticketReview.items
       .filter((i) => i.selected && i.name.trim().length >= 2)
-      .map((i) => ({
-        name: i.name.trim(),
-        unitPrice: i.suggestedPrice,
-        priceUnit: i.priceUnit,
-      }));
+      .map((i) => {
+        const parsed = parsePriceInput(i.priceInput);
+        return {
+          name: i.name.trim(),
+          unitPrice: parsed ?? i.suggestedPrice,
+          priceUnit: i.priceUnit,
+        };
+      })
+      .filter((i) => i.unitPrice > 0);
     if (!items.length) {
       setError("Selecciona al menos un producto");
       return;
@@ -1178,14 +1212,16 @@ export function MenusView({
                         )}
                         <div className="flex items-center gap-2">
                           <input
-                            type="number"
+                            type="text"
                             inputMode="decimal"
-                            min={0}
-                            step={0.01}
+                            autoComplete="off"
                             className="h-9 w-24 rounded-lg border border-stone-200 bg-white px-2 text-right text-sm"
-                            value={item.suggestedPrice}
+                            value={item.priceInput}
                             onChange={(e) => {
-                              const value = parseFloat(e.target.value);
+                              const priceInput = sanitizePriceTyping(
+                                e.target.value
+                              );
+                              const parsed = parsePriceInput(priceInput);
                               setTicketReview((prev) =>
                                 prev
                                   ? {
@@ -1194,11 +1230,30 @@ export function MenusView({
                                         i === idx
                                           ? {
                                               ...row,
-                                              suggestedPrice: Number.isNaN(
-                                                value
-                                              )
-                                                ? row.suggestedPrice
-                                                : value,
+                                              priceInput,
+                                              suggestedPrice:
+                                                parsed ?? row.suggestedPrice,
+                                            }
+                                          : row
+                                      ),
+                                    }
+                                  : prev
+                              );
+                            }}
+                            onBlur={() => {
+                              const parsed = parsePriceInput(item.priceInput);
+                              if (parsed == null) return;
+                              setTicketReview((prev) =>
+                                prev
+                                  ? {
+                                      ...prev,
+                                      items: prev.items.map((row, i) =>
+                                        i === idx
+                                          ? {
+                                              ...row,
+                                              suggestedPrice: parsed,
+                                              priceInput:
+                                                formatPriceInput(parsed),
                                             }
                                           : row
                                       ),
@@ -1797,6 +1852,8 @@ function ShoppingPanel({
   ) => void;
   setShopping: React.Dispatch<React.SetStateAction<ShoppingItem[] | null>>;
 }) {
+  const [priceDrafts, setPriceDrafts] = useState<Record<string, string>>({});
+
   if (shopping.length === 0) {
     return <p className="text-sm text-stone-500">Sin ingredientes</p>;
   }
@@ -1892,26 +1949,35 @@ function ShoppingPanel({
                 </p>
                 <div className="flex items-center gap-1">
                   <input
-                    type="number"
+                    type="text"
                     inputMode="decimal"
-                    min={0}
-                    step={0.1}
+                    autoComplete="off"
                     title="Precio de catálogo"
                     className="h-8 w-14 rounded-lg border border-stone-200 bg-white px-1.5 text-right text-xs"
-                    value={item.unitPrice ?? ""}
+                    value={
+                      priceDrafts[item.name] ??
+                      (item.unitPrice != null
+                        ? formatPriceInput(item.unitPrice)
+                        : "")
+                    }
                     placeholder="—"
                     disabled={savingPrice === item.name}
                     onChange={(e) => {
-                      const raw = e.target.value;
-                      const value = raw === "" ? null : parseFloat(raw);
+                      const priceInput = sanitizePriceTyping(e.target.value);
+                      setPriceDrafts((d) => ({
+                        ...d,
+                        [item.name]: priceInput,
+                      }));
+                      const parsed =
+                        priceInput === "" ? null : parsePriceInput(priceInput);
                       setShopping((prev) =>
                         prev
                           ? prev.map((row) => {
                               if (row.name !== item.name) return row;
                               const unitPrice =
-                                value != null && !Number.isNaN(value)
-                                  ? value
-                                  : null;
+                                priceInput === ""
+                                  ? null
+                                  : (parsed ?? row.unitPrice);
                               const pu = row.priceUnit ?? "ud";
                               return {
                                 ...row,
@@ -1932,9 +1998,14 @@ function ShoppingPanel({
                       );
                     }}
                     onBlur={(e) => {
-                      const value = parseFloat(e.target.value);
-                      if (!Number.isNaN(value) && value >= 0) {
-                        void onSavePrice(item.name, value, priceUnit);
+                      const parsed = parsePriceInput(e.target.value);
+                      setPriceDrafts((d) => {
+                        const next = { ...d };
+                        delete next[item.name];
+                        return next;
+                      });
+                      if (parsed != null && parsed >= 0) {
+                        void onSavePrice(item.name, parsed, priceUnit);
                       }
                     }}
                   />
