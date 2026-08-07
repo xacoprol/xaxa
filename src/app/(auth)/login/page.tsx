@@ -37,7 +37,7 @@ export default function LoginPage() {
   }
 
   return (
-    <AuthShell title="Entrar" subtitle="Accede a tu hogar en X">
+    <AuthShell>
       <form onSubmit={onSubmit} className="space-y-4">
         <Input
           id="email"
@@ -76,22 +76,12 @@ export default function LoginPage() {
   );
 }
 
-function AuthShell({
-  title,
-  subtitle,
-  children,
-}: {
-  title: string;
-  subtitle: string;
-  children: React.ReactNode;
-}) {
+function AuthShell({ children }: { children: React.ReactNode }) {
   return (
     <div className="flex min-h-dvh items-center justify-center bg-[radial-gradient(ellipse_at_top,_#c5efe6_0%,_#f4f7f6_55%)] px-4 py-12">
       <div className="w-full max-w-sm">
         <div className="mb-8 flex flex-col items-center text-center">
           <BrandLogo size="lg" />
-          <h1 className="mt-4 text-xl font-semibold text-navy">{title}</h1>
-          <p className="mt-1 text-sm text-stone-500">{subtitle}</p>
         </div>
         <div className="rounded-2xl border border-stone-200/80 bg-white p-6 shadow-soft">
           {children}
