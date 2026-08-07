@@ -151,7 +151,7 @@ export function estimateLineCost(opts: {
   const { unitPrice, name } = opts;
   if (!(unitPrice > 0)) return null;
 
-  let qty =
+  const qty =
     (opts.totalQty ? parseQuantityString(opts.totalQty) : null) ??
     sumQuantities(opts.quantities);
 

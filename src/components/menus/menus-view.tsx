@@ -316,15 +316,13 @@ export function MenusView({
     return map;
   }, [meals]);
 
-  /** Hoy primero; días pasados al final. */
-  const dayOrder = useMemo(() => {
-    const start = mondayBasedDayIndex(new Date());
-    return Array.from({ length: 7 }, (_, i) => (start + i) % 7);
-  }, [weekStartIso]);
-
-  const todayDay = useMemo(
-    () => mondayBasedDayIndex(new Date()),
-    [weekStartIso]
+  // Hoy primero; días pasados al final (se recalcula al montar / cambiar semana)
+  const todayDay = mondayBasedDayIndex(new Date());
+  const dayOrder = useMemo(
+    () => Array.from({ length: 7 }, (_, i) => (todayDay + i) % 7),
+    // weekStartIso: al pasar de semana conviene reordenar
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [weekStartIso, todayDay]
   );
 
   const showBreakfast = useMemo(
