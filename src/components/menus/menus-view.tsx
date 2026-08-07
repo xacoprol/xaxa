@@ -572,7 +572,6 @@ export function MenusView({
             ref={ticketInputRef}
             type="file"
             accept="image/*"
-            capture="environment"
             className="hidden"
             onChange={(e) => void onTicketFile(e.target.files?.[0] ?? null)}
           />
