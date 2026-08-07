@@ -544,7 +544,7 @@ export function MenusView({
             <BookHeart className="h-4 w-4" />
           </Button>
           <Button
-            variant="secondary"
+            variant={shopping ? "amber" : "secondary"}
             size="sm"
             onClick={() => {
               setTab("semana");
@@ -708,21 +708,68 @@ export function MenusView({
         </div>
       )}
 
-      {shopping && tab === "semana" && (
-        <ShoppingPanel
-          shopping={shopping}
-          orderedShopping={orderedShopping}
-          shoppingTotals={shoppingTotals}
-          checked={checked}
-          savingPrice={savingPrice}
-          ticketLoading={ticketLoading}
-          onClose={() => setShopping(null)}
-          onReset={resetChecked}
-          onToggle={toggleChecked}
-          onSavePrice={savePrice}
-          onUploadTicket={() => ticketInputRef.current?.click()}
-          setShopping={setShopping}
-        />
+      {shopping && (
+        <div
+          className="fixed inset-0 z-50 flex items-end justify-center bg-stone-900/45 sm:items-center sm:p-4"
+          onClick={() => setShopping(null)}
+        >
+          <div
+            className="flex max-h-[92dvh] w-full max-w-lg flex-col overflow-hidden rounded-t-3xl bg-white shadow-xl sm:rounded-3xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-start justify-between gap-3 border-b border-stone-100 px-5 py-4">
+              <div>
+                <h2 className="font-display text-xl font-semibold text-stone-900">
+                  Lista de la compra
+                </h2>
+                <p className="text-sm text-stone-500">
+                  Toca para marcar · ticket Eroski para precios
+                </p>
+              </div>
+              <div className="flex items-center gap-1">
+                <button
+                  type="button"
+                  onClick={() => ticketInputRef.current?.click()}
+                  disabled={ticketLoading}
+                  className="rounded-full p-2 text-amber-800 hover:bg-amber-50 disabled:opacity-50"
+                  aria-label="Subir ticket"
+                  title="Subir ticket"
+                >
+                  <Receipt className="h-4 w-4" />
+                </button>
+                {shoppingTotals.done > 0 && (
+                  <button
+                    type="button"
+                    onClick={resetChecked}
+                    className="rounded-full px-2 py-1 text-xs text-stone-500 hover:bg-stone-100"
+                  >
+                    Reiniciar
+                  </button>
+                )}
+                <button
+                  type="button"
+                  onClick={() => setShopping(null)}
+                  className="rounded-full p-2 text-stone-500 hover:bg-stone-100"
+                  aria-label="Cerrar"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
+            </div>
+            <div className="overflow-y-auto px-5 py-4">
+              <ShoppingPanel
+                shopping={shopping}
+                orderedShopping={orderedShopping}
+                shoppingTotals={shoppingTotals}
+                checked={checked}
+                savingPrice={savingPrice}
+                onToggle={toggleChecked}
+                onSavePrice={savePrice}
+                setShopping={setShopping}
+              />
+            </div>
+          </div>
+        </div>
       )}
 
       {prefsOpen && (
@@ -1273,12 +1320,8 @@ function ShoppingPanel({
   shoppingTotals,
   checked,
   savingPrice,
-  ticketLoading,
-  onClose,
-  onReset,
   onToggle,
   onSavePrice,
-  onUploadTicket,
   setShopping,
 }: {
   shopping: ShoppingItem[];
@@ -1286,186 +1329,142 @@ function ShoppingPanel({
   shoppingTotals: { estimatedTotal: number; pricedCount: number; done: number };
   checked: Set<string>;
   savingPrice: string | null;
-  ticketLoading?: boolean;
-  onClose: () => void;
-  onReset: () => void;
   onToggle: (name: string) => void;
   onSavePrice: (name: string, unitPrice: number) => void;
-  onUploadTicket: () => void;
   setShopping: React.Dispatch<React.SetStateAction<ShoppingItem[] | null>>;
 }) {
+  if (shopping.length === 0) {
+    return <p className="text-sm text-stone-500">Sin ingredientes</p>;
+  }
+
   return (
-    <section className="rounded-2xl border border-amber-100 bg-amber-50/50 p-5">
-      <div className="mb-3 flex flex-wrap items-end justify-between gap-2">
-        <div>
-          <h2 className="font-display text-lg font-semibold text-stone-900">
-            Lista de la compra
-          </h2>
-          <p className="text-xs text-stone-500">
-            Toca para marcar · sube un ticket Eroski para precios reales
-          </p>
-        </div>
-        <div className="flex items-center gap-3">
-          <button
-            type="button"
-            className="inline-flex items-center gap-1 text-sm font-medium text-amber-800 underline disabled:opacity-50"
-            onClick={onUploadTicket}
-            disabled={ticketLoading}
-          >
-            <Receipt className="h-3.5 w-3.5" />
-            {ticketLoading ? "Leyendo…" : "Ticket"}
-          </button>
-          {shoppingTotals.done > 0 && (
-            <button
-              type="button"
-              className="text-sm text-stone-500 underline"
-              onClick={onReset}
-            >
-              Reiniciar
-            </button>
-          )}
-          <button
-            type="button"
-            className="text-sm text-stone-500 underline"
-            onClick={onClose}
-          >
-            Cerrar
-          </button>
+    <div className="space-y-4 pb-[env(safe-area-inset-bottom)]">
+      <div className="flex items-center justify-between rounded-xl bg-amber-50 px-3 py-2 text-sm">
+        <span className="font-medium text-stone-800">
+          {shoppingTotals.done}/{shopping.length} en el carro
+        </span>
+        <div className="h-1.5 w-24 overflow-hidden rounded-full bg-stone-200">
+          <div
+            className="h-full rounded-full bg-teal transition-all"
+            style={{
+              width: `${
+                shopping.length
+                  ? (shoppingTotals.done / shopping.length) * 100
+                  : 0
+              }%`,
+            }}
+          />
         </div>
       </div>
 
-      {shopping.length === 0 ? (
-        <p className="text-sm text-stone-500">Sin ingredientes</p>
-      ) : (
-        <>
-          <div className="mb-3 flex items-center justify-between rounded-xl bg-white/70 px-3 py-2 text-sm">
-            <span className="font-medium text-stone-800">
-              {shoppingTotals.done}/{shopping.length} en el carro
-            </span>
-            <div className="h-1.5 w-24 overflow-hidden rounded-full bg-stone-200">
-              <div
-                className="h-full rounded-full bg-teal transition-all"
-                style={{
-                  width: `${
-                    shopping.length
-                      ? (shoppingTotals.done / shopping.length) * 100
-                      : 0
-                  }%`,
-                }}
-              />
-            </div>
-          </div>
+      <ul className="space-y-2">
+        {orderedShopping.map((item) => {
+          const done = checked.has(item.name);
+          return (
+            <li
+              key={item.name}
+              className={cn(
+                "flex items-center gap-3 rounded-xl border border-stone-100 bg-stone-50/80 px-3 py-3 text-sm text-stone-700",
+                done && "opacity-55"
+              )}
+            >
+              <button
+                type="button"
+                onClick={() => onToggle(item.name)}
+                aria-pressed={done}
+                className={cn(
+                  "flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border-2 transition",
+                  done
+                    ? "border-teal bg-teal text-white"
+                    : "border-stone-300 bg-white text-transparent active:border-teal"
+                )}
+              >
+                <Check className="h-5 w-5" strokeWidth={3} />
+              </button>
 
-          <ul className="space-y-2">
-            {orderedShopping.map((item) => {
-              const done = checked.has(item.name);
-              return (
-                <li
-                  key={item.name}
+              <button
+                type="button"
+                onClick={() => onToggle(item.name)}
+                className="min-w-0 flex-1 text-left"
+              >
+                <p
                   className={cn(
-                    "flex items-center gap-3 rounded-xl bg-white/80 px-3 py-3 text-sm text-stone-700",
-                    done && "opacity-55"
+                    "font-medium text-stone-900",
+                    done && "line-through decoration-stone-400"
                   )}
                 >
-                  <button
-                    type="button"
-                    onClick={() => onToggle(item.name)}
-                    aria-pressed={done}
-                    className={cn(
-                      "flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border-2 transition",
-                      done
-                        ? "border-teal bg-teal text-white"
-                        : "border-stone-300 bg-white text-transparent active:border-teal"
-                    )}
-                  >
-                    <Check className="h-5 w-5" strokeWidth={3} />
-                  </button>
+                  {item.name}
+                </p>
+                <p className="text-xs text-stone-400">
+                  {item.totalQty
+                    ? item.totalQty
+                    : item.quantities.length > 0
+                      ? item.quantities.join(" + ")
+                      : item.count > 1
+                        ? `×${item.count}`
+                        : "—"}
+                </p>
+              </button>
 
-                  <button
-                    type="button"
-                    onClick={() => onToggle(item.name)}
-                    className="min-w-0 flex-1 text-left"
-                  >
-                    <p
-                      className={cn(
-                        "font-medium text-stone-900",
-                        done && "line-through decoration-stone-400"
-                      )}
-                    >
-                      {item.name}
-                    </p>
-                    <p className="text-xs text-stone-400">
-                      {item.totalQty
-                        ? item.totalQty
-                        : item.quantities.length > 0
-                          ? item.quantities.join(" + ")
-                          : item.count > 1
-                            ? `×${item.count}`
-                            : "—"}
-                    </p>
-                  </button>
+              <div className="flex shrink-0 items-center gap-1">
+                <span className="text-xs text-stone-400">€</span>
+                <input
+                  type="number"
+                  inputMode="decimal"
+                  min={0}
+                  step={0.1}
+                  className="h-9 w-16 rounded-lg border border-stone-200 bg-white px-2 text-right text-sm"
+                  value={item.unitPrice ?? ""}
+                  placeholder="—"
+                  disabled={savingPrice === item.name}
+                  onChange={(e) => {
+                    const raw = e.target.value;
+                    const value = raw === "" ? null : parseFloat(raw);
+                    setShopping((prev) =>
+                      prev
+                        ? prev.map((row) =>
+                            row.name === item.name
+                              ? {
+                                  ...row,
+                                  unitPrice:
+                                    value != null && !Number.isNaN(value)
+                                      ? value
+                                      : null,
+                                }
+                              : row
+                          )
+                        : prev
+                    );
+                  }}
+                  onBlur={(e) => {
+                    const value = parseFloat(e.target.value);
+                    if (!Number.isNaN(value) && value >= 0) {
+                      void onSavePrice(item.name, value);
+                    }
+                  }}
+                />
+              </div>
+            </li>
+          );
+        })}
+      </ul>
 
-                  <div className="flex shrink-0 items-center gap-1">
-                    <span className="text-xs text-stone-400">€</span>
-                    <input
-                      type="number"
-                      inputMode="decimal"
-                      min={0}
-                      step={0.1}
-                      className="h-9 w-16 rounded-lg border border-stone-200 bg-white px-2 text-right text-sm"
-                      value={item.unitPrice ?? ""}
-                      placeholder="—"
-                      disabled={savingPrice === item.name}
-                      onChange={(e) => {
-                        const raw = e.target.value;
-                        const value = raw === "" ? null : parseFloat(raw);
-                        setShopping((prev) =>
-                          prev
-                            ? prev.map((row) =>
-                                row.name === item.name
-                                  ? {
-                                      ...row,
-                                      unitPrice:
-                                        value != null && !Number.isNaN(value)
-                                          ? value
-                                          : null,
-                                    }
-                                  : row
-                              )
-                            : prev
-                        );
-                      }}
-                      onBlur={(e) => {
-                        const value = parseFloat(e.target.value);
-                        if (!Number.isNaN(value) && value >= 0) {
-                          void onSavePrice(item.name, value);
-                        }
-                      }}
-                    />
-                  </div>
-                </li>
-              );
-            })}
-          </ul>
-
-          <div className="mt-4 flex items-center justify-between rounded-xl border border-amber-200 bg-white px-4 py-3">
-            <div>
-              <p className="text-xs font-medium uppercase tracking-wider text-amber-700/80">
-                Total estimado
-              </p>
-              <p className="text-xs text-stone-400">
-                {shoppingTotals.pricedCount}/{shopping.length} con precio
-              </p>
-            </div>
-            <p className="font-display text-2xl font-semibold text-navy">
-              {shoppingTotals.estimatedTotal.toLocaleString("es-ES", {
-                style: "currency",
-                currency: "EUR",
-              })}
-            </p>
-          </div>
-        </>
-      )}
-    </section>
+      <div className="flex items-center justify-between rounded-xl border border-amber-200 bg-amber-50/60 px-4 py-3">
+        <div>
+          <p className="text-xs font-medium uppercase tracking-wider text-amber-700/80">
+            Total estimado
+          </p>
+          <p className="text-xs text-stone-400">
+            {shoppingTotals.pricedCount}/{shopping.length} con precio
+          </p>
+        </div>
+        <p className="font-display text-2xl font-semibold text-navy">
+          {shoppingTotals.estimatedTotal.toLocaleString("es-ES", {
+            style: "currency",
+            currency: "EUR",
+          })}
+        </p>
+      </div>
+    </div>
   );
 }
