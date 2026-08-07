@@ -280,7 +280,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         </main>
       </div>
 
-      {/* Tab bar fija (capa propia): no se remonta ni se desplaza al cambiar de sección */}
+      {/* Tab bar fija — cristal iOS */}
       <nav
         aria-label="Secciones"
         className="pointer-events-none fixed inset-x-0 bottom-0 z-50 md:hidden"
@@ -289,37 +289,34 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           WebkitTransform: "translateZ(0)",
         }}
       >
-        <div className="pointer-events-auto px-5 pb-[max(0.4rem,env(safe-area-inset-bottom))] pt-1">
+        <div className="pointer-events-auto flex justify-center px-4 pb-[max(0.5rem,env(safe-area-inset-bottom))] pt-2">
           <ul
             className={cn(
-              "mx-auto flex max-w-[22rem] items-stretch justify-around gap-0.5",
-              "rounded-[1.35rem] border border-white/55",
-              "bg-white/55 shadow-[0_8px_30px_rgba(16,32,56,0.14)]",
-              "backdrop-blur-2xl backdrop-saturate-150",
-              "supports-[backdrop-filter]:bg-white/40"
+              "ios-glass flex w-full max-w-[21rem] items-stretch gap-0.5 p-1.5",
+              "rounded-full"
             )}
           >
             {nav.map((item) => {
               const active = isActivePath(activePath, item.href);
               const Icon = item.icon;
               return (
-                <li key={item.href} className="flex-1">
+                <li key={item.href} className="min-w-0 flex-1">
                   <button
                     type="button"
                     onClick={() => go(item.href)}
                     onPointerEnter={() => router.prefetch(item.href)}
                     onTouchStart={() => router.prefetch(item.href)}
                     className={cn(
-                      "flex w-full flex-col items-center gap-0.5 rounded-[1.1rem] px-1 py-1.5 text-[10px] font-medium transition-colors",
+                      "flex w-full flex-col items-center gap-0.5 rounded-full px-1 py-2 text-[10px] font-medium transition-all duration-200",
                       active
-                        ? "bg-navy/[0.08] text-navy"
-                        : "text-stone-500 active:bg-stone-900/[0.04]"
+                        ? "bg-white/70 text-navy shadow-[0_1px_4px_rgba(16,32,56,0.08)]"
+                        : "text-stone-500/90 active:bg-white/35"
                     )}
                   >
                     <Icon
-                      className={cn("h-5 w-5", active && "stroke-[2.25px]")}
+                      className={cn("h-5 w-5", active && "stroke-[2.35px]")}
                     />
-                    {item.label}
+                    <span className="truncate leading-none">{item.label}</span>
                   </button>
                 </li>
               );
