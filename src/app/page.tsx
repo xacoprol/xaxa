@@ -18,7 +18,7 @@ export default async function HomePage() {
             "radial-gradient(ellipse 80% 55% at 20% -5%, #08a08033 0%, transparent 50%), radial-gradient(ellipse 60% 40% at 100% 100%, #10203822 0%, transparent 45%), #f4f7f6",
         }}
       />
-      <main className="relative z-10 mx-auto flex w-full max-w-lg flex-1 flex-col justify-center px-6 py-16">
+      <main className="relative z-10 mx-auto flex w-full max-w-lg flex-1 flex-col justify-center px-6 py-16 pt-[max(4rem,env(safe-area-inset-top))] pb-[max(4rem,env(safe-area-inset-bottom))]">
         <BrandLogo href={null} size="xl" />
         <p className="mt-6 max-w-sm text-lg text-stone-600 text-balance">
           El hogar, en orden. Gastos, menús e hipoteca para tu familia.

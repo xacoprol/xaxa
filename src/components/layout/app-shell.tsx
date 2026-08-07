@@ -68,8 +68,8 @@ export function AppShell({
 
   return (
     <div className="min-h-dvh bg-[radial-gradient(ellipse_at_top,_#eef7f4_0%,_#f4f7f6_45%,_#e2ebe8_100%)]">
-      {/* Top bar */}
-      <header className="sticky top-0 z-40 border-b border-stone-200/80 bg-white/80 backdrop-blur-md">
+      {/* Top bar — safe-area para notch / Dynamic Island en PWA */}
+      <header className="sticky top-0 z-40 border-b border-stone-200/80 bg-white/80 pt-[env(safe-area-inset-top)] backdrop-blur-md">
         <div className="mx-auto flex h-14 max-w-5xl items-center justify-between px-4">
           <div className="flex items-center gap-3">
             <button
@@ -135,10 +135,10 @@ export function AppShell({
         )}
       </header>
 
-      <div className="mx-auto flex max-w-5xl gap-8 px-4 py-6 pb-24 md:pb-8">
+      <div className="mx-auto flex max-w-5xl gap-8 px-4 py-6 pb-[calc(6rem+env(safe-area-inset-bottom))] md:pb-8">
         {/* Desktop sidebar */}
         <aside className="hidden w-48 shrink-0 md:block">
-          <nav className="sticky top-20 space-y-1">
+          <nav className="sticky top-[calc(5rem+env(safe-area-inset-top))] space-y-1">
             {nav.map((item) => {
               const active =
                 pathname === item.href ||
