@@ -7,8 +7,6 @@ import {
   UtensilsCrossed,
   Landmark,
   LogOut,
-  Menu,
-  X,
   Settings,
 } from "lucide-react";
 import { useEffect, useState, useTransition } from "react";
@@ -79,7 +77,6 @@ function isActivePath(pathname: string, href: string) {
 export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
-  const [open, setOpen] = useState(false);
   const [me, setMe] = useState<MeInfo | null>(null);
   const [isPending, startTransition] = useTransition();
   const [displayPath, setDisplayPath] = useState(pathname);
@@ -130,10 +127,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
   function go(href: string) {
     if (isActivePath(pathname, href) && !isPending) {
-      setOpen(false);
       return;
     }
-    setOpen(false);
     setDisplayPath(href); // pestaña activa al instante
     startTransition(() => {
       router.push(href);
@@ -160,23 +155,13 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     <div className="min-h-dvh bg-[radial-gradient(ellipse_at_top,_#eef7f4_0%,_#f4f7f6_45%,_#e2ebe8_100%)]">
       <header className="sticky top-0 z-40 border-b border-stone-200/80 bg-white/80 pt-[env(safe-area-inset-top)] backdrop-blur-md">
         <div className="mx-auto flex h-14 max-w-5xl items-center justify-between px-4">
-          <div className="flex items-center gap-3">
-            <button
-              type="button"
-              className="rounded-lg p-2 text-stone-600 hover:bg-stone-100 md:hidden"
-              onClick={() => setOpen((v) => !v)}
-              aria-label="Menú"
-            >
-              {open ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
-            </button>
-            <div className="flex items-center gap-2.5">
-              <BrandLogo href="/dashboard" size="sm" />
-              {householdName ? (
-                <span className="hidden text-xs font-medium uppercase tracking-widest text-stone-400 sm:inline">
-                  {householdName}
-                </span>
-              ) : null}
-            </div>
+          <div className="flex items-center gap-2.5">
+            <BrandLogo href="/dashboard" size="sm" />
+            {householdName ? (
+              <span className="hidden text-xs font-medium uppercase tracking-widest text-stone-400 sm:inline">
+                {householdName}
+              </span>
+            ) : null}
           </div>
           <div className="flex items-center gap-3">
             {userName ? (
@@ -194,35 +179,6 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             </button>
           </div>
         </div>
-
-        {open && (
-          <nav className="border-t border-stone-100 bg-white px-4 py-3 md:hidden">
-            <ul className="space-y-1">
-              {nav.map((item) => {
-                const active = isActivePath(activePath, item.href);
-                const Icon = item.icon;
-                return (
-                  <li key={item.href}>
-                    <button
-                      type="button"
-                      onClick={() => go(item.href)}
-                      onPointerEnter={() => router.prefetch(item.href)}
-                      className={cn(
-                        "flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left text-sm font-medium",
-                        active
-                          ? "bg-navy text-white"
-                          : "text-stone-600 hover:bg-stone-50"
-                      )}
-                    >
-                      <Icon className="h-4 w-4" />
-                      {item.label}
-                    </button>
-                  </li>
-                );
-              })}
-            </ul>
-          </nav>
-        )}
       </header>
 
       <div className="mx-auto flex max-w-5xl gap-8 px-4 py-6 pb-[calc(5.25rem+env(safe-area-inset-bottom))] md:pb-8">
