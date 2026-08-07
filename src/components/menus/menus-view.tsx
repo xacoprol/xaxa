@@ -183,7 +183,7 @@ function parsePriceInput(raw: string): number | null {
 
 function sanitizePriceTyping(raw: string): string {
   // Solo dígitos y una coma o punto decimal
-  let s = raw.replace(/[^\d.,]/g, "");
+  const s = raw.replace(/[^\d.,]/g, "");
   const sep = s.search(/[.,]/);
   if (sep === -1) return s;
   const head = s.slice(0, sep + 1).replace(/\./g, ",");
