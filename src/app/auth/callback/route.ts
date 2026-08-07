@@ -26,6 +26,9 @@ export async function GET(request: Request) {
     return NextResponse.redirect(`${origin}/login?error=auth`);
   }
 
+  const allowedNext = new Set(["/onboarding", "/dashboard", "/reset-password"]);
+  const safeNext = allowedNext.has(next) ? next : "/onboarding";
+
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
   if (!supabaseUrl || !anonKey) {
@@ -78,10 +81,19 @@ export async function GET(request: Request) {
         where: { userId: data.user.id },
       });
 
-      const destination = membership ? "/dashboard" : next;
+      // Recuperación de contraseña: respetar next aunque ya tenga hogar
+      const destination =
+        safeNext === "/reset-password"
+          ? "/reset-password"
+          : membership
+            ? "/dashboard"
+            : safeNext;
       return NextResponse.redirect(`${origin}${destination}`);
     } catch (dbError) {
       console.error("[auth/callback] db error:", dbError);
+      if (safeNext === "/reset-password") {
+        return NextResponse.redirect(`${origin}/reset-password`);
+      }
       // Sesión ok aunque falle Prisma: manda a onboarding
       return NextResponse.redirect(`${origin}/onboarding`);
     }

@@ -15,11 +15,15 @@ export async function updateSession(request: NextRequest) {
   }
 
   const isApi = path.startsWith("/api/");
-  const isLoginOrRegister =
-    path.startsWith("/login") || path.startsWith("/register");
+  const isAuthForm =
+    path.startsWith("/login") ||
+    path.startsWith("/register") ||
+    path.startsWith("/forgot-password");
+  const isResetPassword = path.startsWith("/reset-password");
   const isPublic =
     path === "/" ||
-    isLoginOrRegister ||
+    isAuthForm ||
+    isResetPassword ||
     path.startsWith("/auth") ||
     isApi; // las APIs gestionan su propia auth (401/403)
 
@@ -76,7 +80,7 @@ export async function updateSession(request: NextRequest) {
         return NextResponse.redirect(redirectUrl);
       }
 
-      if (user && isLoginOrRegister) {
+      if (user && isAuthForm) {
         const redirectUrl = request.nextUrl.clone();
         redirectUrl.pathname = "/dashboard";
         return NextResponse.redirect(redirectUrl);
