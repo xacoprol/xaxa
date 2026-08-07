@@ -9,6 +9,7 @@ const splitSchema = z.object({
 });
 
 const updateSchema = z.object({
+  title: z.string().trim().min(1).optional(),
   amount: z.number().positive().optional(),
   categoryId: z.string().min(1).optional(),
   date: z.string().min(1).optional(),
@@ -80,6 +81,7 @@ export async function PATCH(request: Request, { params }: Params) {
     return tx.expense.update({
       where: { id: params.id },
       data: {
+        title: data.title,
         amount: data.amount,
         categoryId: data.categoryId,
         date: data.date ? new Date(data.date) : undefined,

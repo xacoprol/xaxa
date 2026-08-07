@@ -21,6 +21,7 @@ const CategoryChart = dynamic(
 
 type ExpenseRow = {
   id: string;
+  title: string;
   amount: string | number;
   date: string | Date;
   note: string | null;
@@ -199,21 +200,16 @@ export function ExpensesView({
               <div className="min-w-0 flex-1">
                 <div className="flex items-baseline justify-between gap-2">
                   <p className="truncate text-sm font-medium text-stone-900">
-                    {e.category.name}
-                    {e.note ? (
-                      <span className="font-normal text-stone-400">
-                        {" "}
-                        · {e.note}
-                      </span>
-                    ) : null}
+                    {e.title?.trim() || e.category.name}
                   </p>
                   <p className="shrink-0 text-sm font-semibold text-stone-900">
                     {formatCurrency(Number(e.amount))}
                   </p>
                 </div>
                 <p className="mt-0.5 text-xs text-stone-400">
-                  {formatDate(e.date)} · {e.paidBy.name} ·{" "}
+                  {e.category.name} · {formatDate(e.date)} · {e.paidBy.name} ·{" "}
                   {e.type === "SHARED" ? "Compartido" : "Individual"}
+                  {e.note ? ` · ${e.note}` : ""}
                 </p>
               </div>
               <div className="flex shrink-0 gap-1">

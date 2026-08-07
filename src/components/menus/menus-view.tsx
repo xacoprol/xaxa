@@ -141,12 +141,11 @@ export function MenusView({
   const [error, setError] = useState<string | null>(null);
   const [selected, setSelected] = useState<DetailItem | null>(null);
   const [savingPrice, setSavingPrice] = useState<string | null>(null);
-  const [tab, setTab] = useState<"semana" | "favoritos" | "preferencias">(
-    "semana"
-  );
+  const [tab, setTab] = useState<"semana" | "favoritos">("semana");
   const [recipes, setRecipes] = useState<Recipe[] | null>(null);
   const [loadingRecipes, setLoadingRecipes] = useState(false);
   const [confirmGenerate, setConfirmGenerate] = useState(false);
+  const [prefsOpen, setPrefsOpen] = useState(false);
 
   useEffect(() => {
     setMeals(initialMeals);
@@ -369,15 +368,14 @@ export function MenusView({
             Semana
           </Button>
           <Button
-            variant={tab === "preferencias" ? "amber" : "secondary"}
+            variant="secondary"
             size="sm"
-            onClick={() => {
-              setTab("preferencias");
-              setShopping(null);
-            }}
+            onClick={() => setPrefsOpen(true)}
+            aria-label="Preferencias"
+            title="Preferencias"
+            className="px-2.5"
           >
             <SlidersHorizontal className="h-4 w-4" />
-            Preferencias
           </Button>
           <Button
             variant={tab === "favoritos" ? "amber" : "secondary"}
@@ -387,9 +385,11 @@ export function MenusView({
               setShopping(null);
               void loadRecipes();
             }}
+            aria-label="Favoritos"
+            title="Favoritos"
+            className="px-2.5"
           >
             <BookHeart className="h-4 w-4" />
-            Favoritos
           </Button>
           <Button
             variant="secondary"
@@ -399,9 +399,11 @@ export function MenusView({
               void loadShopping();
             }}
             disabled={!meals.length}
+            aria-label="Lista compra"
+            title="Lista compra"
+            className="px-2.5"
           >
             <ShoppingCart className="h-4 w-4" />
-            Lista compra
           </Button>
           <Button
             variant="amber"
@@ -512,20 +514,6 @@ export function MenusView({
         </div>
       )}
 
-      {tab === "preferencias" && (
-        <section className="rounded-2xl border border-stone-200/80 bg-white p-5 shadow-soft">
-          <div className="mb-5">
-            <h2 className="font-display text-xl font-semibold text-stone-900">
-              Mis preferencias
-            </h2>
-            <p className="text-sm text-stone-500">
-              Guía a la IA · se combina con las del resto del hogar
-            </p>
-          </div>
-          <PreferencesForm initial={preferenceInitial} />
-        </section>
-      )}
-
       {shopping && tab === "semana" && (
         <ShoppingPanel
           shopping={shopping}
@@ -539,6 +527,43 @@ export function MenusView({
           onSavePrice={savePrice}
           setShopping={setShopping}
         />
+      )}
+
+      {prefsOpen && (
+        <div
+          className="fixed inset-0 z-50 flex items-end justify-center bg-stone-900/45 sm:items-center sm:p-4"
+          onClick={() => setPrefsOpen(false)}
+        >
+          <div
+            className="flex max-h-[92dvh] w-full max-w-2xl flex-col overflow-hidden rounded-t-3xl bg-white shadow-xl sm:rounded-3xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-start justify-between gap-3 border-b border-stone-100 px-5 py-4">
+              <div>
+                <h2 className="font-display text-xl font-semibold text-stone-900">
+                  Mis preferencias
+                </h2>
+                <p className="text-sm text-stone-500">
+                  Guía a la IA · se combina con el resto del hogar
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setPrefsOpen(false)}
+                className="rounded-full p-2 text-stone-500 hover:bg-stone-100"
+                aria-label="Cerrar"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+            <div className="overflow-y-auto px-5 py-5">
+              <PreferencesForm
+                initial={preferenceInitial}
+                onSaved={() => setPrefsOpen(false)}
+              />
+            </div>
+          </div>
+        </div>
       )}
 
       {selected && (

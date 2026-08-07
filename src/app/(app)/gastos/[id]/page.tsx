@@ -48,6 +48,7 @@ export default async function EditGastoPage({
           categories={categories}
           initial={{
             id: expense.id,
+            title: expense.title,
             amount: Number(expense.amount),
             categoryId: expense.categoryId,
             date: expense.date.toISOString().slice(0, 10),

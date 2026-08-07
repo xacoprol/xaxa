@@ -9,6 +9,7 @@ const splitSchema = z.object({
 });
 
 const expenseSchema = z.object({
+  title: z.string().trim().min(1, "Falta el título"),
   amount: z.number().positive(),
   categoryId: z.string().min(1),
   date: z.string().min(1),
@@ -90,6 +91,7 @@ export async function POST(request: Request) {
   const expense = await prisma.expense.create({
     data: {
       householdId: ctx.household.id,
+      title: data.title,
       amount: data.amount,
       categoryId: data.categoryId,
       date: new Date(data.date),

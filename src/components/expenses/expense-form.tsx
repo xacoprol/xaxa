@@ -14,6 +14,7 @@ type SplitState = { userId: string; percent: number };
 
 export type ExpenseFormInitial = {
   id?: string;
+  title: string;
   amount: number;
   categoryId: string;
   date: string;
@@ -36,14 +37,15 @@ export function ExpenseForm({
 }) {
   const router = useRouter();
   const equal = useMemo(() => {
-    const base = Math.floor((10000 / members.length)) / 100;
+    const base = Math.floor(10000 / members.length) / 100;
     const splits = members.map((m) => ({ userId: m.userId, percent: base }));
-    const diff =
-      100 - splits.reduce((s, x) => s + x.percent, 0);
-    if (splits[0]) splits[0].percent = Math.round((splits[0].percent + diff) * 100) / 100;
+    const diff = 100 - splits.reduce((s, x) => s + x.percent, 0);
+    if (splits[0])
+      splits[0].percent = Math.round((splits[0].percent + diff) * 100) / 100;
     return splits;
   }, [members]);
 
+  const [title, setTitle] = useState(initial?.title ?? "");
   const [amount, setAmount] = useState(initial?.amount?.toString() ?? "");
   const [categoryId, setCategoryId] = useState(
     initial?.categoryId ?? categories[0]?.id ?? ""
@@ -81,6 +83,12 @@ export function ExpenseForm({
     setLoading(true);
     setError(null);
 
+    if (!title.trim()) {
+      setError("Pon un título al gasto");
+      setLoading(false);
+      return;
+    }
+
     if (type === "SHARED" && Math.abs(splitTotal - 100) > 0.05) {
       setError("Los porcentajes del reparto deben sumar 100%");
       setLoading(false);
@@ -88,6 +96,7 @@ export function ExpenseForm({
     }
 
     const payload = {
+      title: title.trim(),
       amount: parseFloat(amount),
       categoryId,
       date,
@@ -121,6 +130,16 @@ export function ExpenseForm({
 
   return (
     <form onSubmit={onSubmit} className="space-y-5">
+      <Input
+        id="title"
+        label="Título"
+        placeholder="Ej.: Compra semanal, cena, gasolina…"
+        required
+        value={title}
+        onChange={(e) => setTitle(e.target.value)}
+        autoFocus={!initial?.id}
+      />
+
       <div className="grid gap-4 sm:grid-cols-2">
         <Input
           id="amount"

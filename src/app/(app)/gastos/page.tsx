@@ -80,6 +80,7 @@ export default async function GastosPage({
       balances={balances}
       expenses={expenses.map((e) => ({
         id: e.id,
+        title: e.title,
         amount: Number(e.amount),
         date: e.date,
         note: e.note,

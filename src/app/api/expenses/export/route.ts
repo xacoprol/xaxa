@@ -28,6 +28,7 @@ export async function GET(request: Request) {
 
   const header = [
     "fecha",
+    "titulo",
     "importe",
     "categoria",
     "tipo",
@@ -45,6 +46,7 @@ export async function GET(request: Request) {
         : "";
     return [
       e.date.toISOString().slice(0, 10),
+      csvEscape(e.title || e.category.name),
       Number(e.amount).toFixed(2),
       csvEscape(e.category.name),
       e.type,

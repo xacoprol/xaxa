@@ -102,6 +102,7 @@ model Expense {
   id          String      @id @default(cuid())
   householdId String
   categoryId  String
+  title       String      @default("")
   amount      Decimal     @db.Decimal(12, 2)
   date        DateTime    @db.Date
   note        String?

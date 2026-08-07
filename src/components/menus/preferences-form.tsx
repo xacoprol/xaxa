@@ -156,6 +156,7 @@ function toggleInList(list: string[], value: string) {
 
 export function PreferencesForm({
   initial,
+  onSaved,
 }: {
   initial: {
     allergies: string[];
@@ -164,6 +165,7 @@ export function PreferencesForm({
     mealsPerWeek: number;
     extraNotes: string | null;
   } | null;
+  onSaved?: () => void;
 }) {
   const router = useRouter();
   const [allergies, setAllergies] = useState<string[]>(
@@ -244,6 +246,7 @@ export function PreferencesForm({
     setMessage("Preferencias guardadas");
     setLoading(false);
     router.refresh();
+    onSaved?.();
   }
 
   return (
