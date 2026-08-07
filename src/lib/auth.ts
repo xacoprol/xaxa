@@ -1,5 +1,4 @@
 import { cache } from "react";
-import { unstable_cache } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
@@ -111,6 +110,8 @@ export async function requireApiUser() {
   }
 }
 
+type MembershipRow = NonNullable<Awaited<ReturnType<typeof loadMembership>>>;
+
 async function loadMembership(userId: string) {
   return prisma.householdMember.findFirst({
     where: { userId },
@@ -132,13 +133,21 @@ async function loadMembership(userId: string) {
   });
 }
 
-/** Membership cacheada ~45s entre navegaciones. */
-function getMembershipCached(userId: string) {
-  return unstable_cache(
-    () => loadMembership(userId),
-    [`household-membership-${userId}`],
-    { revalidate: 45 }
-  )();
+/** Caché en memoria de la instancia (sin unstable_cache: choca con cookies en Vercel). */
+const membershipMemo = new Map<
+  string,
+  { at: number; value: MembershipRow | null }
+>();
+const MEMBERSHIP_TTL_MS = 45_000;
+
+async function getMembershipCached(userId: string) {
+  const hit = membershipMemo.get(userId);
+  if (hit && Date.now() - hit.at < MEMBERSHIP_TTL_MS) {
+    return hit.value;
+  }
+  const value = await loadMembership(userId);
+  membershipMemo.set(userId, { at: Date.now(), value });
+  return value;
 }
 
 export const requireHousehold = cache(async () => {

@@ -1,10 +1,11 @@
 import { AppShell } from "@/components/layout/app-shell";
 
 /**
- * Layout síncrono: no espera a Supabase/Prisma.
- * Así loading.tsx aparece al instante al cambiar de sección.
- * La protección de rutas la hace el middleware; cada page valida datos.
+ * Layout síncrono (shell inmediato). force-dynamic evita prerender estático
+ * de páginas con cookies — sin bloquear el layout en auth/DB.
  */
+export const dynamic = "force-dynamic";
+
 export default function AppLayout({
   children,
 }: {
