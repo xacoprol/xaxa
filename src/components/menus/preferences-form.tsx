@@ -51,6 +51,71 @@ const NOTE_SUGGESTIONS = [
   "Ingredientes fáciles de encontrar en supermercado",
 ];
 
+/** Palabras clave por sugerencia para detectar si ya está cubierta en las notas. */
+const NOTE_COVER_KEYS: Record<string, string[]> = {
+  "Recetas fáciles, que no dé pereza hacer": [
+    "recetas faciles",
+    "no de pereza",
+    "no de pereza",
+    "no de pereza hacer",
+  ],
+  "Comida del mediodía para llevar en tupper": ["tupper", "para llevar"],
+  "Comidas para 2 personas": ["2 personas", "para 2", "dos personas"],
+  "Batch cooking: lo de la noche aprovecha para el mediodía siguiente": [
+    "batch cooking",
+    "back cooking",
+    "batchcooking",
+    "aprovechar para el mediodia",
+    "aprovecha para el mediodia",
+    "lo de la noche",
+  ],
+  "Sin horno": ["sin horno", "no tengo horno", "no hay horno"],
+  "Solo sartén, microondas y airfryer": [
+    "airfryer",
+    "air fryer",
+    "microondas",
+    "sarten",
+  ],
+  "Máximo 30–40 min entre semana": ["30", "40 min", "maximo 30"],
+  "Cenas ligeras": ["cenas ligeras", "cena ligera"],
+  "Ingredientes fáciles de encontrar en supermercado": [
+    "supermercado",
+    "faciles de encontrar",
+  ],
+};
+
+function normalizeNoteText(value: string) {
+  return value
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[–—]/g, "-")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function noteAlreadyCovered(notes: string, suggestion: string) {
+  const haystack = normalizeNoteText(notes);
+  if (!haystack) return false;
+
+  const needle = normalizeNoteText(suggestion);
+  if (haystack.includes(needle.slice(0, Math.min(24, needle.length)))) {
+    return true;
+  }
+
+  const keys = NOTE_COVER_KEYS[suggestion] ?? [];
+  // Cubierta si al menos una clave fuerte aparece, o 2+ claves cortas
+  let hits = 0;
+  for (const key of keys) {
+    const k = normalizeNoteText(key);
+    if (!k) continue;
+    if (haystack.includes(k)) {
+      hits += k.length >= 10 ? 2 : 1;
+    }
+  }
+  return hits >= 2;
+}
+
 const MEALS_OPTIONS = [
   { value: 10, label: "10", hint: "Comida+cena · lun–vie" },
   { value: 14, label: "14", hint: "Comida+cena · 7 días" },
@@ -204,13 +269,12 @@ export function PreferencesForm({
   }, [initial]);
 
   const noteHints = useMemo(() => {
-    return NOTE_SUGGESTIONS.filter(
-      (n) => !extraNotes.toLowerCase().includes(n.toLowerCase().slice(0, 18))
-    );
+    return NOTE_SUGGESTIONS.filter((n) => !noteAlreadyCovered(extraNotes, n));
   }, [extraNotes]);
 
   function appendNote(snippet: string) {
     setExtraNotes((prev) => {
+      if (noteAlreadyCovered(prev, snippet)) return prev;
       const trimmed = prev.trim();
       if (!trimmed) return snippet.endsWith(".") ? snippet : `${snippet}.`;
       const sep = trimmed.endsWith(".") || trimmed.endsWith("!") ? " " : ". ";
