@@ -11,9 +11,11 @@ import {
   Sparkles,
   Users,
   BookHeart,
+  SlidersHorizontal,
   X,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { PreferencesForm } from "@/components/menus/preferences-form";
 import { DAY_LABELS } from "@/lib/constants";
 import { cn } from "@/lib/utils";
 
@@ -112,12 +114,22 @@ function formatIngredient(ing: unknown): string {
   return String(ing);
 }
 
+type PreferenceInitial = {
+  allergies: string[];
+  dislikes: string[];
+  goal: string | null;
+  mealsPerWeek: number;
+  extraNotes: string | null;
+};
+
 export function MenusView({
   weekStartIso,
   meals: initialMeals,
+  preferenceInitial,
 }: {
   weekStartIso: string;
   meals: Meal[];
+  preferenceInitial: PreferenceInitial | null;
 }) {
   const router = useRouter();
   const [meals, setMeals] = useState<Meal[]>(initialMeals);
@@ -129,9 +141,12 @@ export function MenusView({
   const [error, setError] = useState<string | null>(null);
   const [selected, setSelected] = useState<DetailItem | null>(null);
   const [savingPrice, setSavingPrice] = useState<string | null>(null);
-  const [tab, setTab] = useState<"semana" | "favoritos">("semana");
+  const [tab, setTab] = useState<"semana" | "favoritos" | "preferencias">(
+    "semana"
+  );
   const [recipes, setRecipes] = useState<Recipe[] | null>(null);
   const [loadingRecipes, setLoadingRecipes] = useState(false);
+  const [confirmGenerate, setConfirmGenerate] = useState(false);
 
   useEffect(() => {
     setMeals(initialMeals);
@@ -344,6 +359,17 @@ export function MenusView({
         </div>
         <div className="flex flex-wrap gap-2">
           <Button
+            variant={tab === "preferencias" ? "amber" : "secondary"}
+            size="sm"
+            onClick={() => {
+              setTab("preferencias");
+              setShopping(null);
+            }}
+          >
+            <SlidersHorizontal className="h-4 w-4" />
+            Preferencias
+          </Button>
+          <Button
             variant={tab === "favoritos" ? "amber" : "secondary"}
             size="sm"
             onClick={() => {
@@ -372,8 +398,12 @@ export function MenusView({
             size="sm"
             loading={generating}
             onClick={() => {
-              setTab("semana");
-              void generate();
+              if (meals.length > 0) {
+                setConfirmGenerate(true);
+              } else {
+                setTab("semana");
+                void generate();
+              }
             }}
           >
             <Sparkles className="h-4 w-4" />
@@ -382,7 +412,7 @@ export function MenusView({
         </div>
       </header>
 
-      <div className="flex gap-2 border-b border-stone-200 pb-2">
+      <div className="flex flex-wrap gap-2 border-b border-stone-200 pb-2">
         <button
           type="button"
           onClick={() => setTab("semana")}
@@ -408,7 +438,19 @@ export function MenusView({
               : "text-stone-500 hover:text-stone-800"
           )}
         >
-          Biblioteca
+          Favoritos
+        </button>
+        <button
+          type="button"
+          onClick={() => setTab("preferencias")}
+          className={cn(
+            "rounded-lg px-3 py-1.5 text-sm font-medium transition",
+            tab === "preferencias"
+              ? "bg-amber-50 text-amber-800"
+              : "text-stone-500 hover:text-stone-800"
+          )}
+        >
+          Preferencias
         </button>
       </div>
 
@@ -502,6 +544,20 @@ export function MenusView({
         </div>
       )}
 
+      {tab === "preferencias" && (
+        <section className="rounded-2xl border border-stone-200/80 bg-white p-5 shadow-soft">
+          <div className="mb-5">
+            <h2 className="font-display text-xl font-semibold text-stone-900">
+              Mis preferencias
+            </h2>
+            <p className="text-sm text-stone-500">
+              Guía a la IA · se combina con las del resto del hogar
+            </p>
+          </div>
+          <PreferencesForm initial={preferenceInitial} />
+        </section>
+      )}
+
       {shopping && tab === "semana" && (
         <ShoppingPanel
           shopping={shopping}
@@ -532,6 +588,46 @@ export function MenusView({
               : undefined
           }
         />
+      )}
+
+      {confirmGenerate && (
+        <div
+          className="fixed inset-0 z-50 flex items-end justify-center bg-stone-900/45 p-4 sm:items-center"
+          onClick={() => setConfirmGenerate(false)}
+        >
+          <div
+            className="w-full max-w-sm rounded-2xl bg-white p-5 shadow-xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h3 className="font-display text-xl font-semibold text-stone-900">
+              ¿Generar menú nuevo?
+            </h3>
+            <p className="mt-2 text-sm leading-relaxed text-stone-600">
+              Se sobrescribirá el menú de esta semana (comidas, cenas y fotos).
+              Los favoritos de la biblioteca no se pierden.
+            </p>
+            <div className="mt-5 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+              <Button
+                variant="secondary"
+                onClick={() => setConfirmGenerate(false)}
+              >
+                Cancelar
+              </Button>
+              <Button
+                variant="amber"
+                loading={generating}
+                onClick={() => {
+                  setConfirmGenerate(false);
+                  setTab("semana");
+                  void generate();
+                }}
+              >
+                <Sparkles className="h-4 w-4" />
+                Sí, generar
+              </Button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
