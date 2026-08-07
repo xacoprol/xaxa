@@ -21,6 +21,7 @@ enum ExpenseType {
 }
 
 enum MealType {
+  DESAYUNO
   COMIDA
   CENA
 }
@@ -140,7 +141,7 @@ model MenuPreference {
   allergies       String[] @default([])
   dislikes        String[] @default([])
   goal            String?  // e.g. "perder peso", "ganar músculo", "equilibrado"
-  mealsPerWeek    Int      @default(14) // comidas + cenas a cubrir
+  mealsPerWeek    Int      @default(14) // 10=laborables, 14=comida+cena, 21=+desayuno
   extraNotes      String?
   updatedAt       DateTime @updatedAt
   createdAt       DateTime @default(now())

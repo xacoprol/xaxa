@@ -52,9 +52,9 @@ const NOTE_SUGGESTIONS = [
 ];
 
 const MEALS_OPTIONS = [
-  { value: 10, label: "10", hint: "Ligera" },
-  { value: 14, label: "14", hint: "Completa" },
-  { value: 21, label: "21", hint: "Intensiva" },
+  { value: 10, label: "10", hint: "Comida+cena · lun–vie" },
+  { value: 14, label: "14", hint: "Comida+cena · 7 días" },
+  { value: 21, label: "21", hint: "Desayuno+comida+cena" },
 ];
 
 function Chip({
@@ -290,7 +290,7 @@ export function PreferencesForm({
             Comidas a cubrir / semana
           </p>
           <p className="text-xs text-stone-500">
-            Comidas + cenas · ahora {mealsPerWeek}
+            21 incluye desayuno cada día · ahora {mealsPerWeek}
           </p>
         </div>
         <div className="grid grid-cols-3 gap-2">

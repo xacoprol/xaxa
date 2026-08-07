@@ -25,7 +25,7 @@ type Difficulty = "FACIL" | "MEDIA" | "ELABORADA";
 type Meal = {
   id: string;
   dayOfWeek: number;
-  mealType: "COMIDA" | "CENA";
+  mealType: "DESAYUNO" | "COMIDA" | "CENA";
   name: string;
   description?: string | null;
   ingredients: unknown;
@@ -226,7 +226,10 @@ export function MenusView({
   }, [shopping, checked]);
 
   const byDay = useMemo(() => {
-    const map: Record<number, { COMIDA?: Meal; CENA?: Meal }> = {};
+    const map: Record<
+      number,
+      { DESAYUNO?: Meal; COMIDA?: Meal; CENA?: Meal }
+    > = {};
     for (let d = 0; d < 7; d++) map[d] = {};
     for (const m of meals) {
       map[m.dayOfWeek][m.mealType] = m;
@@ -234,6 +237,12 @@ export function MenusView({
     return map;
   }, [meals]);
 
+  const showBreakfast = useMemo(
+    () =>
+      (preferenceInitial?.mealsPerWeek ?? 0) >= 18 ||
+      meals.some((m) => m.mealType === "DESAYUNO"),
+    [meals, preferenceInitial?.mealsPerWeek]
+  );
   async function generate(days?: number[]) {
     setError(null);
     if (days) setRegenDay(days[0]);
@@ -475,6 +484,7 @@ export function MenusView({
       {tab === "semana" && (
         <div className="space-y-4">
           {DAY_LABELS.map((label, day) => {
+            const desayuno = byDay[day].DESAYUNO;
             const comida = byDay[day].COMIDA;
             const cena = byDay[day].CENA;
             return (
@@ -499,7 +509,24 @@ export function MenusView({
                     Regenerar
                   </button>
                 </div>
-                <div className="grid gap-3 sm:grid-cols-2">
+                <div
+                  className={cn(
+                    "grid gap-3",
+                    showBreakfast ? "sm:grid-cols-3" : "sm:grid-cols-2"
+                  )}
+                >
+                  {showBreakfast && (
+                    <MealCard
+                      label="Desayuno"
+                      meal={desayuno}
+                      onOpen={(m) => setSelected({ kind: "meal", ...m })}
+                      onFavorite={toggleFavorite}
+                      onGeneratePhoto={generatePhoto}
+                      photoLoading={
+                        !!desayuno && photoLoadingId === desayuno.id
+                      }
+                    />
+                  )}
                   <MealCard
                     label="Comida"
                     meal={comida}

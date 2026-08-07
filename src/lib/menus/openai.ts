@@ -4,7 +4,7 @@ import { aggregateQuantities } from "@/lib/menus/aggregate-quantities";
 
 const mealSchema = z.object({
   dayOfWeek: z.number().int().min(0).max(6),
-  mealType: z.enum(["COMIDA", "CENA"]),
+  mealType: z.enum(["DESAYUNO", "COMIDA", "CENA"]),
   name: z.string().min(2),
   description: z.string().optional(),
   ingredients: z.array(
@@ -41,6 +41,48 @@ export type PreferenceInput = {
   extraNotes: string | null;
 };
 
+function resolveMealPlan(avgMeals: number): {
+  types: Array<"DESAYUNO" | "COMIDA" | "CENA">;
+  dayFilterText: (days?: number[]) => string;
+} {
+  // 21 → 3 al día (desayuno + comida + cena)
+  if (avgMeals >= 18) {
+    const types = ["DESAYUNO", "COMIDA", "CENA"] as const;
+    return {
+      types: [...types],
+      dayFilterText: (days) =>
+        days?.length
+          ? `Genera SOLO para los días (0=lunes…6=domingo): ${days.join(", ")}. Incluye DESAYUNO, COMIDA y CENA de cada día (${days.length * 3} platos).`
+          : "Genera la semana completa (días 0–6) con DESAYUNO, COMIDA y CENA cada día (21 platos).",
+    };
+  }
+
+  // 10 → comida + cena en laborables (lun–vie)
+  if (avgMeals <= 11) {
+    const types = ["COMIDA", "CENA"] as const;
+    return {
+      types: [...types],
+      dayFilterText: (days) => {
+        const target = days?.length
+          ? days.filter((d) => d >= 0 && d <= 4)
+          : [0, 1, 2, 3, 4];
+        const list = (target.length ? target : [0, 1, 2, 3, 4]).join(", ");
+        return `Genera SOLO para días laborables (0=lunes…4=viernes): ${list}. Incluye COMIDA y CENA de cada día (${(target.length || 5) * 2} platos). NO generes sábado ni domingo.`;
+      },
+    };
+  }
+
+  // 14 → comida + cena toda la semana
+  const types = ["COMIDA", "CENA"] as const;
+  return {
+    types: [...types],
+    dayFilterText: (days) =>
+      days?.length
+        ? `Genera SOLO para los días (0=lunes…6=domingo): ${days.join(", ")}. Incluye COMIDA y CENA de cada día (${days.length * 2} platos).`
+        : "Genera la semana completa (días 0–6), COMIDA y CENA cada día (14 platos).",
+  };
+}
+
 function buildPrompt(
   prefs: PreferenceInput[],
   days?: number[],
@@ -62,10 +104,9 @@ function buildPrompt(
         )
       : 14;
 
-  const dayFilter =
-    days && days.length
-      ? `Genera SOLO para los días (0=lunes…6=domingo): ${days.join(", ")}. Incluye COMIDA y CENA de cada día solicitado.`
-      : `Genera la semana completa (días 0–6), COMIDA y CENA cada día (14 platos). Si mealsPerWeek medio del hogar es ${avgMeals} y es menor que 14, prioriza variedad y platos más ligeros en cenas, pero sigue devolviendo 14 entradas.`;
+  const plan = resolveMealPlan(avgMeals);
+  const dayFilter = plan.dayFilterText(days);
+  const mealTypeUnion = plan.types.map((t) => `"${t}"`).join(" | ");
 
   const favoritesBlock =
     favoriteNames.length > 0
@@ -87,7 +128,7 @@ Responde ÚNICAMENTE con JSON válido (sin markdown) con esta forma:
   "meals": [
     {
       "dayOfWeek": 0,
-      "mealType": "COMIDA" | "CENA",
+      "mealType": ${mealTypeUnion},
       "name": "nombre del plato",
       "description": "2–3 frases apetitosas sobre el plato y por qué encaja en casa",
       "ingredients": [{ "name": "ingrediente", "quantity": "200", "unit": "g" }],
@@ -110,7 +151,9 @@ Reglas estrictas:
 - Descripción apetitosa (no marketing vacío).
 - Raciones por defecto 2.
 - Variedad a lo largo de la semana (no repetir el mismo plato).
-- estimatedMins ≈ prepMins + cookMins.`;
+- estimatedMins ≈ prepMins + cookMins.
+- DESAYUNO (si aplica): práctico y rápido (≤20 min), apto para mañana.
+- Solo usa estos mealType: ${plan.types.join(", ")}.`;
 }
 
 function extractJson(text: string) {
