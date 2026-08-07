@@ -1,12 +1,13 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   Check,
   Clock,
   Heart,
   ImagePlus,
+  Receipt,
   RefreshCw,
   ShoppingCart,
   Sparkles,
@@ -115,6 +116,19 @@ function formatIngredient(ing: unknown): string {
   return String(ing);
 }
 
+type TicketReviewItem = {
+  name: string;
+  suggestedPrice: number;
+  selected: boolean;
+};
+
+type TicketReview = {
+  store: string | null;
+  date: string | null;
+  totalPaid: number | null;
+  items: TicketReviewItem[];
+};
+
 type PreferenceInitial = {
   allergies: string[];
   dislikes: string[];
@@ -148,6 +162,10 @@ export function MenusView({
   const [confirmGenerate, setConfirmGenerate] = useState(false);
   const [prefsOpen, setPrefsOpen] = useState(false);
   const [photoLoadingId, setPhotoLoadingId] = useState<string | null>(null);
+  const [ticketReview, setTicketReview] = useState<TicketReview | null>(null);
+  const [ticketLoading, setTicketLoading] = useState(false);
+  const [ticketSaving, setTicketSaving] = useState(false);
+  const ticketInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     setMeals(initialMeals);
@@ -384,6 +402,89 @@ export function MenusView({
     }
   }
 
+  async function onTicketFile(file: File | null) {
+    if (!file) return;
+    setTicketLoading(true);
+    setError(null);
+    try {
+      const form = new FormData();
+      form.append("file", file);
+      const res = await fetch("/api/menus/ticket-prices", {
+        method: "POST",
+        body: form,
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setError(data.error ?? "No se pudo leer el ticket");
+        return;
+      }
+      const items = (data.ticket?.items ?? []) as {
+        name: string;
+        suggestedPrice: number;
+      }[];
+      if (!items.length) {
+        setError("No encontré productos con precio en el ticket");
+        return;
+      }
+      setTicketReview({
+        store: data.ticket.store ?? null,
+        date: data.ticket.date ?? null,
+        totalPaid: data.ticket.totalPaid ?? null,
+        items: items.map((i) => ({
+          name: i.name,
+          suggestedPrice: i.suggestedPrice,
+          selected: true,
+        })),
+      });
+    } finally {
+      setTicketLoading(false);
+      if (ticketInputRef.current) ticketInputRef.current.value = "";
+    }
+  }
+
+  async function saveTicketPrices() {
+    if (!ticketReview) return;
+    const items = ticketReview.items
+      .filter((i) => i.selected)
+      .map((i) => ({ name: i.name, unitPrice: i.suggestedPrice }));
+    if (!items.length) {
+      setError("Selecciona al menos un producto");
+      return;
+    }
+    setTicketSaving(true);
+    setError(null);
+    try {
+      const res = await fetch("/api/menus/ticket-prices", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ items }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setError(data.error ?? "No se pudieron guardar los precios");
+        return;
+      }
+
+      // Actualiza lista abierta si coincide el nombre
+      setShopping((prev) => {
+        if (!prev) return prev;
+        const map = new Map(
+          items.map((i) => [i.name.toLowerCase(), i.unitPrice])
+        );
+        return prev.map((row) => {
+          const hit = map.get(row.name.toLowerCase());
+          return hit != null
+            ? { ...row, unitPrice: hit, source: "saved" as const }
+            : row;
+        });
+      });
+
+      setTicketReview(null);
+    } finally {
+      setTicketSaving(false);
+    }
+  }
+
   async function removeRecipe(id: string) {
     await fetch(`/api/menus/recipes?id=${id}`, { method: "DELETE" });
     setRecipes((prev) => (prev ? prev.filter((r) => r.id !== id) : prev));
@@ -456,6 +557,25 @@ export function MenusView({
           >
             <ShoppingCart className="h-4 w-4" />
           </Button>
+          <Button
+            variant="secondary"
+            size="sm"
+            loading={ticketLoading}
+            onClick={() => ticketInputRef.current?.click()}
+            aria-label="Subir ticket Eroski"
+            title="Subir ticket para precios"
+            className="px-2.5"
+          >
+            <Receipt className="h-4 w-4" />
+          </Button>
+          <input
+            ref={ticketInputRef}
+            type="file"
+            accept="image/*"
+            capture="environment"
+            className="hidden"
+            onChange={(e) => void onTicketFile(e.target.files?.[0] ?? null)}
+          />
           <Button
             variant="amber"
             size="sm"
@@ -596,10 +716,12 @@ export function MenusView({
           shoppingTotals={shoppingTotals}
           checked={checked}
           savingPrice={savingPrice}
+          ticketLoading={ticketLoading}
           onClose={() => setShopping(null)}
           onReset={resetChecked}
           onToggle={toggleChecked}
           onSavePrice={savePrice}
+          onUploadTicket={() => ticketInputRef.current?.click()}
           setShopping={setShopping}
         />
       )}
@@ -636,6 +758,136 @@ export function MenusView({
                 initial={preferenceInitial}
                 onSaved={() => setPrefsOpen(false)}
               />
+            </div>
+          </div>
+        </div>
+      )}
+
+      {ticketReview && (
+        <div
+          className="fixed inset-0 z-50 flex items-end justify-center bg-stone-900/45 sm:items-center sm:p-4"
+          onClick={() => !ticketSaving && setTicketReview(null)}
+        >
+          <div
+            className="flex max-h-[92dvh] w-full max-w-lg flex-col overflow-hidden rounded-t-3xl bg-white shadow-xl sm:rounded-3xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-start justify-between gap-3 border-b border-stone-100 px-5 py-4">
+              <div>
+                <h2 className="font-display text-xl font-semibold text-stone-900">
+                  Precios del ticket
+                </h2>
+                <p className="text-sm text-stone-500">
+                  {ticketReview.store ?? "Supermercado"}
+                  {ticketReview.date ? ` · ${ticketReview.date}` : ""}
+                  {ticketReview.totalPaid != null
+                    ? ` · total ${ticketReview.totalPaid.toLocaleString("es-ES", {
+                        style: "currency",
+                        currency: "EUR",
+                      })}`
+                    : ""}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setTicketReview(null)}
+                className="rounded-full p-2 text-stone-500 hover:bg-stone-100"
+                aria-label="Cerrar"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+            <div className="overflow-y-auto px-5 py-4">
+              <p className="mb-3 text-xs text-stone-500">
+                Elige qué precios guardar en el catálogo del hogar
+              </p>
+              <ul className="space-y-2">
+                {ticketReview.items.map((item, idx) => (
+                  <li
+                    key={`${item.name}-${idx}`}
+                    className="flex items-center gap-3 rounded-xl border border-stone-100 bg-stone-50/80 px-3 py-2"
+                  >
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setTicketReview((prev) =>
+                          prev
+                            ? {
+                                ...prev,
+                                items: prev.items.map((row, i) =>
+                                  i === idx
+                                    ? { ...row, selected: !row.selected }
+                                    : row
+                                ),
+                              }
+                            : prev
+                        )
+                      }
+                      className={cn(
+                        "flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border-2",
+                        item.selected
+                          ? "border-teal bg-teal text-white"
+                          : "border-stone-300 bg-white text-transparent"
+                      )}
+                      aria-pressed={item.selected}
+                    >
+                      <Check className="h-4 w-4" strokeWidth={3} />
+                    </button>
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-sm font-medium text-stone-900">
+                        {item.name}
+                      </p>
+                    </div>
+                    <input
+                      type="number"
+                      inputMode="decimal"
+                      min={0}
+                      step={0.01}
+                      className="h-9 w-20 rounded-lg border border-stone-200 bg-white px-2 text-right text-sm"
+                      value={item.suggestedPrice}
+                      onChange={(e) => {
+                        const value = parseFloat(e.target.value);
+                        setTicketReview((prev) =>
+                          prev
+                            ? {
+                                ...prev,
+                                items: prev.items.map((row, i) =>
+                                  i === idx
+                                    ? {
+                                        ...row,
+                                        suggestedPrice: Number.isNaN(value)
+                                          ? row.suggestedPrice
+                                          : value,
+                                      }
+                                    : row
+                                ),
+                              }
+                            : prev
+                        );
+                      }}
+                    />
+                    <span className="text-xs text-stone-400">€</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+            <div className="flex gap-2 border-t border-stone-100 px-5 py-4">
+              <Button
+                variant="secondary"
+                className="flex-1"
+                onClick={() => setTicketReview(null)}
+                disabled={ticketSaving}
+              >
+                Cancelar
+              </Button>
+              <Button
+                variant="amber"
+                className="flex-1"
+                loading={ticketSaving}
+                onClick={() => void saveTicketPrices()}
+              >
+                Guardar precios
+              </Button>
             </div>
           </div>
         </div>
@@ -1022,10 +1274,12 @@ function ShoppingPanel({
   shoppingTotals,
   checked,
   savingPrice,
+  ticketLoading,
   onClose,
   onReset,
   onToggle,
   onSavePrice,
+  onUploadTicket,
   setShopping,
 }: {
   shopping: ShoppingItem[];
@@ -1033,10 +1287,12 @@ function ShoppingPanel({
   shoppingTotals: { estimatedTotal: number; pricedCount: number; done: number };
   checked: Set<string>;
   savingPrice: string | null;
+  ticketLoading?: boolean;
   onClose: () => void;
   onReset: () => void;
   onToggle: (name: string) => void;
   onSavePrice: (name: string, unitPrice: number) => void;
+  onUploadTicket: () => void;
   setShopping: React.Dispatch<React.SetStateAction<ShoppingItem[] | null>>;
 }) {
   return (
@@ -1047,10 +1303,19 @@ function ShoppingPanel({
             Lista de la compra
           </h2>
           <p className="text-xs text-stone-500">
-            Toca para marcar · se guarda en este móvil
+            Toca para marcar · sube un ticket Eroski para precios reales
           </p>
         </div>
         <div className="flex items-center gap-3">
+          <button
+            type="button"
+            className="inline-flex items-center gap-1 text-sm font-medium text-amber-800 underline disabled:opacity-50"
+            onClick={onUploadTicket}
+            disabled={ticketLoading}
+          >
+            <Receipt className="h-3.5 w-3.5" />
+            {ticketLoading ? "Leyendo…" : "Ticket"}
+          </button>
           {shoppingTotals.done > 0 && (
             <button
               type="button"
