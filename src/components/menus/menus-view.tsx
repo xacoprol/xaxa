@@ -721,7 +721,7 @@ export function MenusView({
             return (
               <section key={label} className="space-y-3">
                 <div className="flex items-center justify-between">
-                  <h2 className="font-display text-lg font-semibold text-stone-900">
+                  <h2 className="font-display text-lg font-semibold leading-tight text-stone-900">
                     {label}
                   </h2>
                   <button
@@ -743,10 +743,10 @@ export function MenusView({
                 <div
                   className={cn(
                     // Móvil: carrusel a sangre por la derecha, peek del siguiente
-                    "-mr-4 flex gap-3 overflow-x-auto scroll-smooth pb-1 pr-4",
+                    "-mr-4 flex items-stretch gap-3 overflow-x-auto scroll-smooth pb-1 pr-4",
                     "snap-x snap-mandatory [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden",
                     // Desktop: rejilla normal
-                    "sm:mr-0 sm:grid sm:gap-3 sm:overflow-visible sm:pb-0 sm:pr-0 sm:snap-none",
+                    "sm:mr-0 sm:grid sm:items-stretch sm:gap-3 sm:overflow-visible sm:pb-0 sm:pr-0 sm:snap-none",
                     showBreakfast ? "sm:grid-cols-3" : "sm:grid-cols-2"
                   )}
                 >
@@ -769,7 +769,7 @@ export function MenusView({
                     .map((slot) => (
                       <div
                         key={slot.key}
-                        className="flex w-[78%] max-w-[17.5rem] shrink-0 snap-start sm:w-auto sm:max-w-none sm:shrink"
+                        className="flex w-[78%] max-w-[17.5rem] shrink-0 snap-start self-stretch sm:w-auto sm:max-w-none sm:shrink"
                       >
                         <MealCard
                           label={slot.label}
@@ -1254,15 +1254,18 @@ function MealCard({
 }) {
   if (!meal) {
     return (
-      <div className="flex h-full w-full flex-col overflow-hidden rounded-2xl border border-dashed border-stone-200 bg-stone-50/80">
+      <div className="flex h-full min-h-full w-full flex-col overflow-hidden rounded-2xl border border-dashed border-stone-200 bg-stone-50/80">
         <div className="aspect-[4/3] shrink-0 bg-stone-100" />
-        <div className="flex flex-1 flex-col p-3">
-          <p className="text-[10px] uppercase tracking-wide text-stone-400">
-            {label}
-          </p>
-          <p className="mt-0.5 min-h-[2.5em] text-sm leading-snug text-stone-300">
-            Sin plato
-          </p>
+        <div className="flex flex-1 flex-col justify-between gap-2 p-3">
+          <div>
+            <p className="text-[10px] uppercase leading-none tracking-wide text-stone-400">
+              {label}
+            </p>
+            <p className="mt-1 h-10 text-sm leading-snug text-stone-300">
+              Sin plato
+            </p>
+          </div>
+          <p className="h-4 text-xs text-transparent">·</p>
         </div>
       </div>
     );
@@ -1273,7 +1276,7 @@ function MealCard({
   const missingPhoto = !meal.imageUrl;
 
   return (
-    <div className="group flex h-full w-full flex-col overflow-hidden rounded-2xl border border-stone-200/80 bg-white shadow-soft">
+    <div className="group flex h-full min-h-full w-full flex-col overflow-hidden rounded-2xl border border-stone-200/80 bg-white shadow-soft">
       <div className="relative shrink-0">
         <button
           type="button"
@@ -1291,26 +1294,26 @@ function MealCard({
           />
         </button>
       </div>
-      <div className="flex flex-1 items-start gap-2 p-3">
+      <div className="flex flex-1 items-stretch gap-2 p-3">
         <button
           type="button"
           onClick={() => onOpen(meal)}
-          className="min-w-0 flex-1 text-left"
+          className="flex min-w-0 flex-1 flex-col text-left"
         >
-          <p className="text-[10px] uppercase tracking-wide text-amber-700/70">
+          <p className="text-[10px] uppercase leading-none tracking-wide text-amber-700/70">
             {label}
           </p>
-          <p className="mt-0.5 line-clamp-2 min-h-[2.5em] font-medium leading-snug text-stone-900">
+          <p className="mt-1 line-clamp-2 h-10 font-medium leading-snug text-stone-900">
             {meal.name}
           </p>
-          <p className="mt-1 flex flex-wrap gap-x-2 gap-y-0.5 text-xs text-stone-500">
+          <p className="mt-auto flex flex-wrap gap-x-2 gap-y-0.5 pt-1 text-xs leading-none text-stone-500">
             <span>{DIFFICULTY_LABEL[difficulty]}</span>
             {mins != null && <span>· {mins} min</span>}
             {meal.servings != null && <span>· {meal.servings} raciones</span>}
           </p>
         </button>
-        <div className="flex shrink-0 flex-col gap-1">
-          {missingPhoto && (
+        <div className="flex w-8 shrink-0 flex-col items-center justify-start gap-1">
+          {missingPhoto ? (
             <button
               type="button"
               onClick={() => onGeneratePhoto(meal.id)}
@@ -1323,6 +1326,8 @@ function MealCard({
                 className={cn("h-4 w-4", photoLoading && "animate-pulse")}
               />
             </button>
+          ) : (
+            <span className="h-8 w-8" aria-hidden />
           )}
           <button
             type="button"
