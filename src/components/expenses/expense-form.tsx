@@ -68,10 +68,38 @@ export function ExpenseForm({
 
   const splitTotal = splits.reduce((s, x) => s + x.percent, 0);
 
-  function updateSplit(userId: string, percent: number) {
-    setSplits((prev) =>
-      prev.map((s) => (s.userId === userId ? { ...s, percent } : s))
-    );
+  function updateSplit(userId: string, rawPercent: number) {
+    const clamped = Math.min(100, Math.max(0, rawPercent));
+    const rounded = Math.round(clamped * 100) / 100;
+
+    setSplits((prev) => {
+      const others = prev.filter((s) => s.userId !== userId);
+      if (others.length === 0) {
+        return prev.map((s) =>
+          s.userId === userId ? { ...s, percent: 100 } : s
+        );
+      }
+
+      const remaining = Math.round((100 - rounded) * 100) / 100;
+      const base = Math.floor((remaining * 100) / others.length) / 100;
+      let assigned = 0;
+
+      const nextOthers = others.map((s, i) => {
+        if (i === others.length - 1) {
+          const last = Math.round((remaining - assigned) * 100) / 100;
+          return { ...s, percent: last };
+        }
+        assigned = Math.round((assigned + base) * 100) / 100;
+        return { ...s, percent: base };
+      });
+
+      const otherMap = new Map(nextOthers.map((s) => [s.userId, s.percent]));
+      return prev.map((s) =>
+        s.userId === userId
+          ? { ...s, percent: rounded }
+          : { ...s, percent: otherMap.get(s.userId) ?? 0 }
+      );
+    });
   }
 
   function distributeEqual() {
@@ -253,14 +281,9 @@ export function ExpenseForm({
               );
             })}
           </div>
-          <p
-            className={`mt-3 text-xs ${
-              Math.abs(splitTotal - 100) < 0.05
-                ? "text-teal-700"
-                : "text-amber-700"
-            }`}
-          >
-            Total: {splitTotal.toFixed(2)}%
+          <p className="mt-3 text-xs text-teal-700">
+            Total: {splitTotal.toFixed(2)}% · al cambiar uno, el resto se ajusta
+            solo
           </p>
         </div>
       )}
