@@ -13,7 +13,6 @@ import {
 } from "lucide-react";
 import { useEffect, useState, useTransition } from "react";
 import { BrandLogo } from "@/components/brand/logo";
-import { SectionSkeleton } from "@/components/layout/section-skeleton";
 import { cn } from "@/lib/utils";
 import { createClient } from "@/lib/supabase/client";
 import { MODULE_ACCENTS } from "@/lib/constants";
@@ -226,7 +225,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         )}
       </header>
 
-      <div className="mx-auto flex max-w-5xl gap-8 px-4 py-6 pb-[calc(6rem+env(safe-area-inset-bottom))] md:pb-8">
+      <div className="mx-auto flex max-w-5xl gap-8 px-4 py-6 pb-[calc(5.25rem+env(safe-area-inset-bottom))] md:pb-8">
         <aside className="hidden w-48 shrink-0 md:block">
           <nav className="sticky top-[calc(5rem+env(safe-area-inset-top))] space-y-1">
             {nav.map((item) => {
@@ -259,37 +258,74 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           </nav>
         </aside>
 
-        <main className="min-w-0 flex-1">
-          {isPending ? <SectionSkeleton /> : children}
+        <main className="relative min-w-0 flex-1">
+          <div
+            className={cn(
+              "transition-opacity duration-150",
+              isPending && "pointer-events-none select-none opacity-45"
+            )}
+          >
+            {children}
+          </div>
+          {isPending && (
+            <div
+              className="pointer-events-none absolute inset-x-0 top-0 z-10"
+              aria-hidden
+            >
+              <div className="h-0.5 overflow-hidden rounded-full bg-stone-200/70">
+                <div className="h-full w-2/5 animate-[pulse_0.9s_ease-in-out_infinite] rounded-full bg-teal" />
+              </div>
+            </div>
+          )}
         </main>
       </div>
 
-      <nav className="fixed inset-x-0 bottom-0 z-40 border-t border-stone-200 bg-white/95 backdrop-blur-md md:hidden">
-        <ul className="mx-auto flex max-w-lg items-stretch justify-around px-2 pb-[env(safe-area-inset-bottom)]">
-          {nav.map((item) => {
-            const active = isActivePath(activePath, item.href);
-            const Icon = item.icon;
-            return (
-              <li key={item.href} className="flex-1">
-                <button
-                  type="button"
-                  onClick={() => go(item.href)}
-                  onPointerEnter={() => router.prefetch(item.href)}
-                  onTouchStart={() => router.prefetch(item.href)}
-                  className={cn(
-                    "flex w-full flex-col items-center gap-0.5 py-2 text-[10px] font-medium",
-                    active ? "text-navy" : "text-stone-400"
-                  )}
-                >
-                  <Icon
-                    className={cn("h-5 w-5", active && "stroke-[2.25px]")}
-                  />
-                  {item.label}
-                </button>
-              </li>
-            );
-          })}
-        </ul>
+      {/* Tab bar fija (capa propia): no se remonta ni se desplaza al cambiar de sección */}
+      <nav
+        aria-label="Secciones"
+        className="pointer-events-none fixed inset-x-0 bottom-0 z-50 md:hidden"
+        style={{
+          transform: "translateZ(0)",
+          WebkitTransform: "translateZ(0)",
+        }}
+      >
+        <div className="pointer-events-auto px-5 pb-[max(0.4rem,env(safe-area-inset-bottom))] pt-1">
+          <ul
+            className={cn(
+              "mx-auto flex max-w-[22rem] items-stretch justify-around gap-0.5",
+              "rounded-[1.35rem] border border-white/55",
+              "bg-white/55 shadow-[0_8px_30px_rgba(16,32,56,0.14)]",
+              "backdrop-blur-2xl backdrop-saturate-150",
+              "supports-[backdrop-filter]:bg-white/40"
+            )}
+          >
+            {nav.map((item) => {
+              const active = isActivePath(activePath, item.href);
+              const Icon = item.icon;
+              return (
+                <li key={item.href} className="flex-1">
+                  <button
+                    type="button"
+                    onClick={() => go(item.href)}
+                    onPointerEnter={() => router.prefetch(item.href)}
+                    onTouchStart={() => router.prefetch(item.href)}
+                    className={cn(
+                      "flex w-full flex-col items-center gap-0.5 rounded-[1.1rem] px-1 py-1.5 text-[10px] font-medium transition-colors",
+                      active
+                        ? "bg-navy/[0.08] text-navy"
+                        : "text-stone-500 active:bg-stone-900/[0.04]"
+                    )}
+                  >
+                    <Icon
+                      className={cn("h-5 w-5", active && "stroke-[2.25px]")}
+                    />
+                    {item.label}
+                  </button>
+                </li>
+              );
+            })}
+          </ul>
+        </div>
       </nav>
     </div>
   );

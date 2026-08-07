@@ -6,6 +6,7 @@ import {
   Clock,
   Heart,
   ImagePlus,
+  Loader2,
   Receipt,
   RefreshCw,
   ShoppingCart,
@@ -17,8 +18,9 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { PreferencesForm } from "@/components/menus/preferences-form";
-import { DAY_LABELS } from "@/lib/constants";
+import { DAY_LABELS, mondayBasedDayIndex } from "@/lib/constants";
 import { cn } from "@/lib/utils";
+import { estimateLineCost } from "@/lib/menus/aggregate-quantities";
 
 type Difficulty = "FACIL" | "MEDIA" | "ELABORADA";
 
@@ -63,7 +65,11 @@ type ShoppingItem = {
   quantities: string[];
   totalQty?: string | null;
   count: number;
+  /** Precio de catálogo (€/kg, €/l o €/ud) */
   unitPrice: number | null;
+  priceUnit?: "kg" | "l" | "ud";
+  /** Estimación prorrateada para la cantidad de esta semana */
+  lineEstimate?: number | null;
   source: "saved" | "default" | null;
 };
 
@@ -160,6 +166,8 @@ async function imageFileToJpeg(file: File): Promise<File> {
 type TicketReviewItem = {
   name: string;
   suggestedPrice: number;
+  priceUnit: "kg" | "l" | "ud";
+  ticketNote: string | null;
   selected: boolean;
 };
 
@@ -191,7 +199,11 @@ export function MenusView({
   const [generating, setGenerating] = useState(false);
   const [imaging, setImaging] = useState(false);
   const [regenDay, setRegenDay] = useState<number | null>(null);
+  const [shoppingOpen, setShoppingOpen] = useState(false);
   const [shopping, setShopping] = useState<ShoppingItem[] | null>(null);
+  const [shoppingLoading, setShoppingLoading] = useState(false);
+  const shoppingWeekRef = useRef<string | null>(null);
+  const shoppingFetchIdRef = useRef(0);
   const [checked, setChecked] = useState<Set<string>>(() => new Set());
   const [error, setError] = useState<string | null>(null);
   const [selected, setSelected] = useState<DetailItem | null>(null);
@@ -215,6 +227,9 @@ export function MenusView({
 
   useEffect(() => {
     setChecked(loadChecked(weekStartIso));
+    setShopping(null);
+    shoppingWeekRef.current = null;
+    setShoppingOpen(false);
   }, [weekStartIso]);
 
   const fillImages = useCallback(
@@ -267,13 +282,18 @@ export function MenusView({
 
   const shoppingTotals = useMemo(() => {
     if (!shopping) return { estimatedTotal: 0, pricedCount: 0, done: 0 };
-    const priced = shopping.filter((i) => i.unitPrice != null);
+    const priced = shopping.filter((i) => i.lineEstimate != null);
     const estimatedTotal =
-      Math.round(priced.reduce((s, i) => s + (i.unitPrice ?? 0), 0) * 100) /
+      Math.round(priced.reduce((s, i) => s + (i.lineEstimate ?? 0), 0) * 100) /
       100;
     const done = shopping.filter((i) => checked.has(i.name)).length;
     return { estimatedTotal, pricedCount: priced.length, done };
   }, [shopping, checked]);
+
+  const shoppingComplete =
+    !!shopping &&
+    shopping.length > 0 &&
+    shoppingTotals.done === shopping.length;
 
   const orderedShopping = useMemo(() => {
     if (!shopping) return [];
@@ -295,6 +315,17 @@ export function MenusView({
     }
     return map;
   }, [meals]);
+
+  /** Hoy primero; días pasados al final. */
+  const dayOrder = useMemo(() => {
+    const start = mondayBasedDayIndex(new Date());
+    return Array.from({ length: 7 }, (_, i) => (start + i) % 7);
+  }, [weekStartIso]);
+
+  const todayDay = useMemo(
+    () => mondayBasedDayIndex(new Date()),
+    [weekStartIso]
+  );
 
   const showBreakfast = useMemo(
     () =>
@@ -411,14 +442,60 @@ export function MenusView({
     if (tab === "favoritos") void loadRecipes();
   }
 
-  async function loadShopping() {
-    const res = await fetch(
-      `/api/menus/shopping-list?weekStart=${weekStartIso}`
-    );
-    const data = await res.json();
-    setChecked(loadChecked(weekStartIso));
-    setShopping(data.items ?? []);
+  async function loadShopping(opts?: { silent?: boolean }) {
+    const fetchId = ++shoppingFetchIdRef.current;
+    if (!opts?.silent) setShoppingLoading(true);
+    try {
+      const res = await fetch(
+        `/api/menus/shopping-list?weekStart=${weekStartIso}`
+      );
+      const data = await res.json();
+      if (fetchId !== shoppingFetchIdRef.current) return;
+      if (!res.ok) return;
+      setChecked(loadChecked(weekStartIso));
+      setShopping(data.items ?? []);
+      shoppingWeekRef.current = weekStartIso;
+    } finally {
+      if (fetchId === shoppingFetchIdRef.current) {
+        setShoppingLoading(false);
+      }
+    }
   }
+
+  function openShopping() {
+    setTab("semana");
+    setShoppingOpen(true);
+    const hasCache =
+      shopping != null && shoppingWeekRef.current === weekStartIso;
+    if (!hasCache) setChecked(loadChecked(weekStartIso));
+    void loadShopping({ silent: hasCache });
+  }
+
+  // Precarga en idle para que al abrir suela estar lista
+  useEffect(() => {
+    if (!meals.length) return;
+    if (shoppingWeekRef.current === weekStartIso && shopping != null) return;
+    const run = () => void loadShopping({ silent: true });
+    const ric = (
+      window as Window & {
+        requestIdleCallback?: (
+          cb: () => void,
+          opts?: { timeout: number }
+        ) => number;
+        cancelIdleCallback?: (id: number) => void;
+      }
+    ).requestIdleCallback;
+    if (ric) {
+      const id = ric(run, { timeout: 1200 });
+      return () =>
+        (
+          window as Window & { cancelIdleCallback?: (id: number) => void }
+        ).cancelIdleCallback?.(id);
+    }
+    const t = window.setTimeout(run, 350);
+    return () => window.clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [weekStartIso, meals.length]);
 
   function toggleChecked(name: string) {
     setChecked((prev) => {
@@ -436,23 +513,38 @@ export function MenusView({
     saveChecked(weekStartIso, next);
   }
 
-  async function savePrice(name: string, unitPrice: number) {
+  async function savePrice(
+    name: string,
+    unitPrice: number,
+    priceUnit: "kg" | "l" | "ud" = "ud"
+  ) {
     setSavingPrice(name);
     const res = await fetch("/api/menus/ingredient-prices", {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name, unitPrice }),
+      body: JSON.stringify({ name, unitPrice, priceUnit }),
     });
     setSavingPrice(null);
     if (!res.ok) return;
 
     setShopping((prev) =>
       prev
-        ? prev.map((item) =>
-            item.name === name
-              ? { ...item, unitPrice, source: "saved" as const }
-              : item
-          )
+        ? prev.map((item) => {
+            if (item.name !== name) return item;
+            return {
+              ...item,
+              unitPrice,
+              priceUnit,
+              source: "saved" as const,
+              lineEstimate: estimateLineCost({
+                quantities: item.quantities,
+                totalQty: item.totalQty ?? null,
+                unitPrice,
+                priceUnit,
+                name: item.name,
+              }),
+            };
+          })
         : prev
     );
   }
@@ -531,6 +623,8 @@ export function MenusView({
       const items = (data.ticket?.items ?? []) as {
         name: string;
         suggestedPrice: number;
+        priceUnit?: "kg" | "l" | "ud";
+        ticketNote?: string | null;
       }[];
       if (!items.length) {
         setError("No encontré productos con precio en el ticket");
@@ -543,6 +637,9 @@ export function MenusView({
         items: items.map((i) => ({
           name: i.name,
           suggestedPrice: i.suggestedPrice,
+          priceUnit:
+            i.priceUnit === "kg" || i.priceUnit === "l" ? i.priceUnit : "ud",
+          ticketNote: i.ticketNote ?? null,
           selected: true,
         })),
       });
@@ -557,8 +654,12 @@ export function MenusView({
   async function saveTicketPrices() {
     if (!ticketReview) return;
     const items = ticketReview.items
-      .filter((i) => i.selected)
-      .map((i) => ({ name: i.name, unitPrice: i.suggestedPrice }));
+      .filter((i) => i.selected && i.name.trim().length >= 2)
+      .map((i) => ({
+        name: i.name.trim(),
+        unitPrice: i.suggestedPrice,
+        priceUnit: i.priceUnit,
+      }));
     if (!items.length) {
       setError("Selecciona al menos un producto");
       return;
@@ -581,13 +682,27 @@ export function MenusView({
       setShopping((prev) => {
         if (!prev) return prev;
         const map = new Map(
-          items.map((i) => [i.name.toLowerCase(), i.unitPrice])
+          items.map((i) => [
+            i.name.toLowerCase(),
+            { unitPrice: i.unitPrice, priceUnit: i.priceUnit },
+          ])
         );
         return prev.map((row) => {
           const hit = map.get(row.name.toLowerCase());
-          return hit != null
-            ? { ...row, unitPrice: hit, source: "saved" as const }
-            : row;
+          if (!hit) return row;
+          return {
+            ...row,
+            unitPrice: hit.unitPrice,
+            priceUnit: hit.priceUnit,
+            source: "saved" as const,
+            lineEstimate: estimateLineCost({
+              quantities: row.quantities,
+              totalQty: row.totalQty ?? null,
+              unitPrice: hit.unitPrice,
+              priceUnit: hit.priceUnit,
+              name: row.name,
+            }),
+          };
         });
       });
 
@@ -626,7 +741,7 @@ export function MenusView({
             size="sm"
             onClick={() => {
               setTab("semana");
-              setShopping(null);
+              setShoppingOpen(false);
             }}
           >
             Semana
@@ -646,7 +761,7 @@ export function MenusView({
             size="sm"
             onClick={() => {
               setTab("favoritos");
-              setShopping(null);
+              setShoppingOpen(false);
               void loadRecipes();
             }}
             aria-label="Favoritos"
@@ -656,18 +771,27 @@ export function MenusView({
             <BookHeart className="h-4 w-4" />
           </Button>
           <Button
-            variant={shopping ? "amber" : "secondary"}
+            variant={shoppingOpen ? "amber" : "secondary"}
             size="sm"
-            onClick={() => {
-              setTab("semana");
-              void loadShopping();
-            }}
+            onClick={openShopping}
             disabled={!meals.length}
-            aria-label="Lista compra"
-            title="Lista compra"
-            className="px-2.5"
+            aria-label={
+              shoppingComplete ? "Lista compra hecha" : "Lista compra"
+            }
+            title={
+              shoppingComplete ? "Lista de la compra hecha" : "Lista compra"
+            }
+            className="relative px-2.5"
           >
             <ShoppingCart className="h-4 w-4" />
+            {shoppingComplete && (
+              <span
+                className="absolute -right-0.5 -top-0.5 flex h-3.5 w-3.5 items-center justify-center rounded-full bg-teal text-white ring-2 ring-white"
+                aria-hidden
+              >
+                <Check className="h-2.5 w-2.5" strokeWidth={3} />
+              </span>
+            )}
           </Button>
           <Button
             variant="secondary"
@@ -714,15 +838,28 @@ export function MenusView({
 
       {tab === "semana" && (
         <div className="space-y-4">
-          {DAY_LABELS.map((label, day) => {
+          {dayOrder.map((day, index) => {
+            const label = DAY_LABELS[day];
+            const isToday = todayDay === day;
+            // Días ya pasados quedan al final, un poco atenuados
+            const isPastSection = todayDay > 0 && index >= 7 - todayDay;
             const desayuno = byDay[day].DESAYUNO;
             const comida = byDay[day].COMIDA;
             const cena = byDay[day].CENA;
+
             return (
-              <section key={label} className="space-y-3">
+              <section
+                key={label}
+                className={cn("space-y-3", isPastSection && "opacity-55")}
+              >
                 <div className="flex items-center justify-between">
-                  <h2 className="font-display text-lg font-semibold leading-tight text-stone-900">
+                  <h2 className="font-display flex items-baseline gap-2 text-lg font-semibold leading-tight text-stone-900">
                     {label}
+                    {isToday && (
+                      <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-amber-800">
+                        Hoy
+                      </span>
+                    )}
                   </h2>
                   <button
                     type="button"
@@ -832,10 +969,10 @@ export function MenusView({
         </div>
       )}
 
-      {shopping && (
+      {shoppingOpen && (
         <div
           className="fixed inset-0 z-50 flex items-end justify-center bg-stone-900/45 sm:items-center sm:p-4"
-          onClick={() => setShopping(null)}
+          onClick={() => setShoppingOpen(false)}
         >
           <div
             className="flex max-h-[92dvh] w-full max-w-lg flex-col overflow-hidden rounded-t-3xl bg-white shadow-xl sm:rounded-3xl"
@@ -847,7 +984,9 @@ export function MenusView({
                   Lista de la compra
                 </h2>
                 <p className="text-sm text-stone-500">
-                  Toca para marcar · ticket Eroski para precios
+                  {shoppingLoading && !shopping
+                    ? "Cargando productos…"
+                    : "Toca para marcar · ticket Eroski para precios"}
                 </p>
               </div>
               <div className="flex items-center gap-1">
@@ -872,7 +1011,7 @@ export function MenusView({
                 )}
                 <button
                   type="button"
-                  onClick={() => setShopping(null)}
+                  onClick={() => setShoppingOpen(false)}
                   className="rounded-full p-2 text-stone-500 hover:bg-stone-100"
                   aria-label="Cerrar"
                 >
@@ -881,16 +1020,24 @@ export function MenusView({
               </div>
             </div>
             <div className="overflow-y-auto px-5 py-4">
-              <ShoppingPanel
-                shopping={shopping}
-                orderedShopping={orderedShopping}
-                shoppingTotals={shoppingTotals}
-                checked={checked}
-                savingPrice={savingPrice}
-                onToggle={toggleChecked}
-                onSavePrice={savePrice}
-                setShopping={setShopping}
-              />
+              {shoppingLoading && !shopping ? (
+                <ShoppingListSkeleton />
+              ) : shopping ? (
+                <ShoppingPanel
+                  shopping={shopping}
+                  orderedShopping={orderedShopping}
+                  shoppingTotals={shoppingTotals}
+                  checked={checked}
+                  savingPrice={savingPrice}
+                  onToggle={toggleChecked}
+                  onSavePrice={savePrice}
+                  setShopping={setShopping}
+                />
+              ) : (
+                <p className="text-sm text-stone-500">
+                  No se pudo cargar la lista. Cierra y vuelve a abrir.
+                </p>
+              )}
             </div>
           </div>
         </div>
@@ -969,74 +1116,126 @@ export function MenusView({
             </div>
             <div className="overflow-y-auto px-5 py-4">
               <p className="mb-3 text-xs text-stone-500">
-                Elige qué precios guardar en el catálogo del hogar
+                Revisa y corrige si hace falta. Al peso se guarda{" "}
+                <span className="font-medium text-stone-700">€/kg</span>, en
+                líquidos <span className="font-medium text-stone-700">€/l</span>{" "}
+                — no el total de la línea.
               </p>
               <ul className="space-y-2">
                 {ticketReview.items.map((item, idx) => (
                   <li
-                    key={`${item.name}-${idx}`}
-                    className="flex items-center gap-3 rounded-xl border border-stone-100 bg-stone-50/80 px-3 py-2"
+                    key={`ticket-item-${idx}`}
+                    className="rounded-xl border border-stone-100 bg-stone-50/80 px-3 py-2.5"
                   >
-                    <button
-                      type="button"
-                      onClick={() =>
-                        setTicketReview((prev) =>
-                          prev
-                            ? {
-                                ...prev,
-                                items: prev.items.map((row, i) =>
-                                  i === idx
-                                    ? { ...row, selected: !row.selected }
-                                    : row
-                                ),
-                              }
-                            : prev
-                        )
-                      }
-                      className={cn(
-                        "flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border-2",
-                        item.selected
-                          ? "border-teal bg-teal text-white"
-                          : "border-stone-300 bg-white text-transparent"
-                      )}
-                      aria-pressed={item.selected}
-                    >
-                      <Check className="h-4 w-4" strokeWidth={3} />
-                    </button>
-                    <div className="min-w-0 flex-1">
-                      <p className="truncate text-sm font-medium text-stone-900">
-                        {item.name}
-                      </p>
+                    <div className="flex items-start gap-3">
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setTicketReview((prev) =>
+                            prev
+                              ? {
+                                  ...prev,
+                                  items: prev.items.map((row, i) =>
+                                    i === idx
+                                      ? { ...row, selected: !row.selected }
+                                      : row
+                                  ),
+                                }
+                              : prev
+                          )
+                        }
+                        className={cn(
+                          "mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border-2",
+                          item.selected
+                            ? "border-teal bg-teal text-white"
+                            : "border-stone-300 bg-white text-transparent"
+                        )}
+                        aria-pressed={item.selected}
+                      >
+                        <Check className="h-4 w-4" strokeWidth={3} />
+                      </button>
+                      <div className="min-w-0 flex-1 space-y-1.5">
+                        <input
+                          type="text"
+                          className="h-9 w-full rounded-lg border border-stone-200 bg-white px-2.5 text-sm font-medium text-stone-900"
+                          value={item.name}
+                          onChange={(e) => {
+                            const name = e.target.value;
+                            setTicketReview((prev) =>
+                              prev
+                                ? {
+                                    ...prev,
+                                    items: prev.items.map((row, i) =>
+                                      i === idx ? { ...row, name } : row
+                                    ),
+                                  }
+                                : prev
+                            );
+                          }}
+                        />
+                        {item.ticketNote && (
+                          <p className="text-[11px] text-stone-400">
+                            {item.ticketNote}
+                          </p>
+                        )}
+                        <div className="flex items-center gap-2">
+                          <input
+                            type="number"
+                            inputMode="decimal"
+                            min={0}
+                            step={0.01}
+                            className="h-9 w-24 rounded-lg border border-stone-200 bg-white px-2 text-right text-sm"
+                            value={item.suggestedPrice}
+                            onChange={(e) => {
+                              const value = parseFloat(e.target.value);
+                              setTicketReview((prev) =>
+                                prev
+                                  ? {
+                                      ...prev,
+                                      items: prev.items.map((row, i) =>
+                                        i === idx
+                                          ? {
+                                              ...row,
+                                              suggestedPrice: Number.isNaN(
+                                                value
+                                              )
+                                                ? row.suggestedPrice
+                                                : value,
+                                            }
+                                          : row
+                                      ),
+                                    }
+                                  : prev
+                              );
+                            }}
+                          />
+                          <select
+                            className="h-9 rounded-lg border border-stone-200 bg-white px-2 text-xs font-medium text-stone-600"
+                            value={item.priceUnit}
+                            onChange={(e) => {
+                              const priceUnit = e.target.value as
+                                | "kg"
+                                | "l"
+                                | "ud";
+                              setTicketReview((prev) =>
+                                prev
+                                  ? {
+                                      ...prev,
+                                      items: prev.items.map((row, i) =>
+                                        i === idx ? { ...row, priceUnit } : row
+                                      ),
+                                    }
+                                  : prev
+                              );
+                            }}
+                          >
+                            <option value="kg">€/kg</option>
+                            <option value="l">€/l</option>
+                            <option value="ud">€/ud</option>
+                          </select>
+                        </div>
+                      </div>
                     </div>
-                    <input
-                      type="number"
-                      inputMode="decimal"
-                      min={0}
-                      step={0.01}
-                      className="h-9 w-20 rounded-lg border border-stone-200 bg-white px-2 text-right text-sm"
-                      value={item.suggestedPrice}
-                      onChange={(e) => {
-                        const value = parseFloat(e.target.value);
-                        setTicketReview((prev) =>
-                          prev
-                            ? {
-                                ...prev,
-                                items: prev.items.map((row, i) =>
-                                  i === idx
-                                    ? {
-                                        ...row,
-                                        suggestedPrice: Number.isNaN(value)
-                                          ? row.suggestedPrice
-                                          : value,
-                                      }
-                                    : row
-                                ),
-                              }
-                            : prev
-                        );
-                      }}
-                    />
-                    <span className="text-xs text-stone-400">€</span>
                   </li>
                 ))}
               </ul>
@@ -1550,6 +1749,33 @@ function RecipeSheet({
   );
 }
 
+function ShoppingListSkeleton() {
+  return (
+    <div className="space-y-3 pb-[env(safe-area-inset-bottom)]" aria-busy>
+      <div className="flex items-center gap-2 text-sm text-stone-500">
+        <Loader2 className="h-4 w-4 animate-spin text-teal" />
+        Preparando productos…
+      </div>
+      {Array.from({ length: 8 }).map((_, i) => (
+        <div
+          key={i}
+          className="flex items-center gap-3 rounded-xl border border-stone-100 bg-stone-50/80 px-3 py-3"
+        >
+          <div className="h-11 w-11 shrink-0 animate-pulse rounded-xl bg-stone-200/80" />
+          <div className="min-w-0 flex-1 space-y-2">
+            <div
+              className="h-3.5 animate-pulse rounded bg-stone-200/90"
+              style={{ width: `${55 + (i % 3) * 12}%` }}
+            />
+            <div className="h-2.5 w-24 animate-pulse rounded bg-stone-100" />
+          </div>
+          <div className="h-8 w-16 animate-pulse rounded-lg bg-stone-100" />
+        </div>
+      ))}
+    </div>
+  );
+}
+
 function ShoppingPanel({
   shopping,
   orderedShopping,
@@ -1566,7 +1792,11 @@ function ShoppingPanel({
   checked: Set<string>;
   savingPrice: string | null;
   onToggle: (name: string) => void;
-  onSavePrice: (name: string, unitPrice: number) => void;
+  onSavePrice: (
+    name: string,
+    unitPrice: number,
+    priceUnit?: "kg" | "l" | "ud"
+  ) => void;
   setShopping: React.Dispatch<React.SetStateAction<ShoppingItem[] | null>>;
 }) {
   if (shopping.length === 0) {
@@ -1596,6 +1826,7 @@ function ShoppingPanel({
       <ul className="space-y-2">
         {orderedShopping.map((item) => {
           const done = checked.has(item.name);
+          const priceUnit = item.priceUnit ?? "ud";
           return (
             <li
               key={item.name}
@@ -1639,46 +1870,114 @@ function ShoppingPanel({
                       : item.count > 1
                         ? `×${item.count}`
                         : "—"}
+                  {item.unitPrice != null && (
+                    <span className="text-stone-300">
+                      {" "}
+                      · {item.unitPrice.toLocaleString("es-ES", {
+                        style: "currency",
+                        currency: "EUR",
+                      })}
+                      /{priceUnit}
+                    </span>
+                  )}
                 </p>
               </button>
 
-              <div className="flex shrink-0 items-center gap-1">
-                <span className="text-xs text-stone-400">€</span>
-                <input
-                  type="number"
-                  inputMode="decimal"
-                  min={0}
-                  step={0.1}
-                  className="h-9 w-16 rounded-lg border border-stone-200 bg-white px-2 text-right text-sm"
-                  value={item.unitPrice ?? ""}
-                  placeholder="—"
-                  disabled={savingPrice === item.name}
-                  onChange={(e) => {
-                    const raw = e.target.value;
-                    const value = raw === "" ? null : parseFloat(raw);
-                    setShopping((prev) =>
-                      prev
-                        ? prev.map((row) =>
-                            row.name === item.name
-                              ? {
-                                  ...row,
-                                  unitPrice:
-                                    value != null && !Number.isNaN(value)
-                                      ? value
-                                      : null,
-                                }
-                              : row
-                          )
-                        : prev
-                    );
-                  }}
-                  onBlur={(e) => {
-                    const value = parseFloat(e.target.value);
-                    if (!Number.isNaN(value) && value >= 0) {
-                      void onSavePrice(item.name, value);
-                    }
-                  }}
-                />
+              <div className="flex shrink-0 flex-col items-end gap-0.5">
+                <p className="text-sm font-semibold text-stone-800">
+                  {item.lineEstimate != null
+                    ? item.lineEstimate.toLocaleString("es-ES", {
+                        style: "currency",
+                        currency: "EUR",
+                      })
+                    : "—"}
+                </p>
+                <div className="flex items-center gap-1">
+                  <input
+                    type="number"
+                    inputMode="decimal"
+                    min={0}
+                    step={0.1}
+                    title="Precio de catálogo"
+                    className="h-8 w-14 rounded-lg border border-stone-200 bg-white px-1.5 text-right text-xs"
+                    value={item.unitPrice ?? ""}
+                    placeholder="—"
+                    disabled={savingPrice === item.name}
+                    onChange={(e) => {
+                      const raw = e.target.value;
+                      const value = raw === "" ? null : parseFloat(raw);
+                      setShopping((prev) =>
+                        prev
+                          ? prev.map((row) => {
+                              if (row.name !== item.name) return row;
+                              const unitPrice =
+                                value != null && !Number.isNaN(value)
+                                  ? value
+                                  : null;
+                              const pu = row.priceUnit ?? "ud";
+                              return {
+                                ...row,
+                                unitPrice,
+                                lineEstimate:
+                                  unitPrice != null
+                                    ? estimateLineCost({
+                                        quantities: row.quantities,
+                                        totalQty: row.totalQty ?? null,
+                                        unitPrice,
+                                        priceUnit: pu,
+                                        name: row.name,
+                                      })
+                                    : null,
+                              };
+                            })
+                          : prev
+                      );
+                    }}
+                    onBlur={(e) => {
+                      const value = parseFloat(e.target.value);
+                      if (!Number.isNaN(value) && value >= 0) {
+                        void onSavePrice(item.name, value, priceUnit);
+                      }
+                    }}
+                  />
+                  <select
+                    className="h-8 rounded-lg border border-stone-200 bg-white px-1 text-[10px] text-stone-500"
+                    value={priceUnit}
+                    disabled={savingPrice === item.name}
+                    onChange={(e) => {
+                      const nextUnit = e.target.value as "kg" | "l" | "ud";
+                      setShopping((prev) =>
+                        prev
+                          ? prev.map((row) => {
+                              if (row.name !== item.name) return row;
+                              const unitPrice = row.unitPrice;
+                              return {
+                                ...row,
+                                priceUnit: nextUnit,
+                                lineEstimate:
+                                  unitPrice != null
+                                    ? estimateLineCost({
+                                        quantities: row.quantities,
+                                        totalQty: row.totalQty ?? null,
+                                        unitPrice,
+                                        priceUnit: nextUnit,
+                                        name: row.name,
+                                      })
+                                    : null,
+                              };
+                            })
+                          : prev
+                      );
+                      if (item.unitPrice != null) {
+                        void onSavePrice(item.name, item.unitPrice, nextUnit);
+                      }
+                    }}
+                  >
+                    <option value="kg">/kg</option>
+                    <option value="l">/l</option>
+                    <option value="ud">/ud</option>
+                  </select>
+                </div>
               </div>
             </li>
           );
@@ -1691,7 +1990,8 @@ function ShoppingPanel({
             Total estimado
           </p>
           <p className="text-xs text-stone-400">
-            {shoppingTotals.pricedCount}/{shopping.length} con precio
+            {shoppingTotals.pricedCount}/{shopping.length} con precio · según
+            cantidad de la semana
           </p>
         </div>
         <p className="font-display text-2xl font-semibold text-navy">

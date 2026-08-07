@@ -66,6 +66,7 @@ export async function PUT(request: Request) {
         z.object({
           name: z.string().min(1),
           unitPrice: z.number().min(0).max(9999),
+          priceUnit: z.enum(["kg", "l", "ud"]).optional(),
         })
       )
       .min(1)
@@ -80,6 +81,7 @@ export async function PUT(request: Request) {
   const saved = [];
   for (const item of parsed.data.items) {
     const nameKey = normalizeIngredientKey(item.name);
+    const priceUnit = item.priceUnit ?? "ud";
     const row = await prisma.ingredientPrice.upsert({
       where: {
         householdId_nameKey: {
@@ -92,16 +94,19 @@ export async function PUT(request: Request) {
         nameKey,
         name: item.name.trim(),
         unitPrice: item.unitPrice,
+        priceUnit,
       },
       update: {
         name: item.name.trim(),
         unitPrice: item.unitPrice,
+        priceUnit,
       },
     });
     saved.push({
       name: row.name,
       nameKey: row.nameKey,
       unitPrice: Number(row.unitPrice),
+      priceUnit: row.priceUnit,
     });
   }
 

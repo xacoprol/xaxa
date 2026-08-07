@@ -277,7 +277,9 @@ model IngredientPrice {
   householdId String
   nameKey     String   // normalizado (minúsculas, sin acentos)
   name        String
-  unitPrice   Decimal  @db.Decimal(10, 2) // € estimado por línea de compra
+  /// € por unidad de catálogo: kg | l | ud
+  unitPrice   Decimal  @db.Decimal(10, 2)
+  priceUnit   String   @default("ud") // kg | l | ud
   updatedAt   DateTime @updatedAt
   createdAt   DateTime @default(now())
 

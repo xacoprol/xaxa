@@ -50,3 +50,9 @@ export const DAY_LABELS = [
   "Sábado",
   "Domingo",
 ] as const;
+
+/** Índice Mon=0…Sun=6 en hora local. */
+export function mondayBasedDayIndex(date = new Date()): number {
+  const js = date.getDay(); // 0=Sun
+  return js === 0 ? 6 : js - 1;
+}

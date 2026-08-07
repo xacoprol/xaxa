@@ -69,7 +69,7 @@ export function PwaRegister() {
   if (!deferred && !showIosTip) return null;
 
   return (
-    <div className="fixed inset-x-0 bottom-[calc(4.5rem+env(safe-area-inset-bottom))] z-50 px-4 md:bottom-6">
+    <div className="fixed inset-x-0 bottom-[calc(4.75rem+env(safe-area-inset-bottom))] z-50 px-4 md:bottom-6">
       <div className="mx-auto flex max-w-lg items-start gap-3 rounded-2xl border border-stone-200 bg-white p-4 shadow-soft">
         <div className="mt-0.5 rounded-lg bg-navy p-2 text-white">
           <Download className="h-4 w-4" />

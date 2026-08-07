@@ -3,12 +3,18 @@ import { startOfWeek } from "date-fns";
 import { prisma } from "@/lib/prisma";
 import { requireApiHousehold } from "@/lib/auth";
 import { buildShoppingList } from "@/lib/menus/openai";
+import { normalizeIngredientKey } from "@/lib/menus/default-prices";
 import {
-  lookupDefaultPrice,
-  normalizeIngredientKey,
-} from "@/lib/menus/default-prices";
+  estimateLineCost,
+  type CatalogPriceUnit,
+} from "@/lib/menus/aggregate-quantities";
 
 export const dynamic = "force-dynamic";
+
+function asPriceUnit(raw: string | null | undefined): CatalogPriceUnit {
+  if (raw === "kg" || raw === "l" || raw === "ud") return raw;
+  return "ud";
+}
 
 export async function GET(request: Request) {
   const { ctx, error } = await requireApiHousehold();
@@ -48,29 +54,48 @@ export async function GET(request: Request) {
       nameKey: { in: keys },
     },
   });
-  const savedMap = new Map(saved.map((s) => [s.nameKey, Number(s.unitPrice)]));
+  const savedMap = new Map(
+    saved.map((s) => [
+      s.nameKey,
+      {
+        unitPrice: Number(s.unitPrice),
+        priceUnit: asPriceUnit(s.priceUnit),
+      },
+    ])
+  );
 
   const items = baseItems.map((item) => {
     const nameKey = normalizeIngredientKey(item.name);
     const savedPrice = savedMap.get(nameKey);
-    const defaultPrice = lookupDefaultPrice(item.name);
-    const unitPrice = savedPrice ?? defaultPrice;
-    const source: "saved" | "default" | null =
-      savedPrice != null ? "saved" : defaultPrice != null ? "default" : null;
+    // Solo precios guardados por el hogar (tickets / manual). Sin defaults inventados.
+    const unitPrice = savedPrice?.unitPrice ?? null;
+    const priceUnit = savedPrice?.priceUnit ?? "ud";
+    const lineEstimate =
+      unitPrice != null
+        ? estimateLineCost({
+            quantities: item.quantities,
+            totalQty: item.totalQty,
+            unitPrice,
+            priceUnit,
+            name: item.name,
+          })
+        : null;
 
     return {
       ...item,
       nameKey,
       unitPrice,
-      source,
+      priceUnit,
+      lineEstimate,
+      source: savedPrice != null ? ("saved" as const) : null,
     };
   });
 
   const estimatedTotal = items.reduce(
-    (sum, item) => sum + (item.unitPrice ?? 0),
+    (sum, item) => sum + (item.lineEstimate ?? 0),
     0
   );
-  const pricedCount = items.filter((i) => i.unitPrice != null).length;
+  const pricedCount = items.filter((i) => i.lineEstimate != null).length;
 
   return NextResponse.json({
     items,

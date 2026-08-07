@@ -13,6 +13,7 @@ export async function PUT(request: Request) {
   const schema = z.object({
     name: z.string().min(1),
     unitPrice: z.number().min(0).max(9999),
+    priceUnit: z.enum(["kg", "l", "ud"]).optional(),
   });
   const parsed = schema.safeParse(await request.json());
   if (!parsed.success) {
@@ -20,6 +21,7 @@ export async function PUT(request: Request) {
   }
 
   const nameKey = normalizeIngredientKey(parsed.data.name);
+  const priceUnit = parsed.data.priceUnit ?? "ud";
   const price = await prisma.ingredientPrice.upsert({
     where: {
       householdId_nameKey: {
@@ -32,10 +34,12 @@ export async function PUT(request: Request) {
       nameKey,
       name: parsed.data.name.trim(),
       unitPrice: parsed.data.unitPrice,
+      priceUnit,
     },
     update: {
       name: parsed.data.name.trim(),
       unitPrice: parsed.data.unitPrice,
+      priceUnit,
     },
   });
 
@@ -44,6 +48,7 @@ export async function PUT(request: Request) {
       name: price.name,
       nameKey: price.nameKey,
       unitPrice: Number(price.unitPrice),
+      priceUnit: price.priceUnit,
     },
   });
 }
