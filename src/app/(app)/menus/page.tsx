@@ -47,12 +47,12 @@ export default async function MenusPage() {
       />
 
       <section className="rounded-2xl border border-stone-200/80 bg-white p-5 shadow-soft">
-        <div className="mb-4">
+        <div className="mb-5">
           <h2 className="font-display text-xl font-semibold text-stone-900">
             Mis preferencias
           </h2>
           <p className="text-sm text-stone-500">
-            Se combinan con las del resto del hogar al generar
+            Guía a la IA · se combina con las del resto del hogar
           </p>
         </div>
         <PreferencesForm
