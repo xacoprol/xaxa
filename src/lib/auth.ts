@@ -1,4 +1,5 @@
 import { cache } from "react";
+import { unstable_cache } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
@@ -13,7 +14,7 @@ export const getSessionUser = cache(async () => {
       return null;
     }
     const supabase = createClient();
-    // getSession lee la cookie local (rápido). El middleware ya validó con getUser.
+    // getSession lee la cookie local (rápido). El middleware ya miró la sesión.
     const {
       data: { session },
     } = await supabase.auth.getSession();
@@ -31,7 +32,14 @@ export const ensureDbUser = cache(async () => {
   try {
     let dbUser = await prisma.user.findUnique({
       where: { id: authUser.id },
-      select: { id: true, email: true, name: true, avatarUrl: true, createdAt: true, updatedAt: true },
+      select: {
+        id: true,
+        email: true,
+        name: true,
+        avatarUrl: true,
+        createdAt: true,
+        updatedAt: true,
+      },
     });
 
     if (!dbUser) {
@@ -49,7 +57,14 @@ export const ensureDbUser = cache(async () => {
             authUser.user_metadata?.name ??
             authUser.email!.split("@")[0],
         },
-        select: { id: true, email: true, name: true, avatarUrl: true, createdAt: true, updatedAt: true },
+        select: {
+          id: true,
+          email: true,
+          name: true,
+          avatarUrl: true,
+          createdAt: true,
+          updatedAt: true,
+        },
       });
     }
 
@@ -96,28 +111,41 @@ export async function requireApiUser() {
   }
 }
 
+async function loadMembership(userId: string) {
+  return prisma.householdMember.findFirst({
+    where: { userId },
+    include: {
+      household: {
+        include: {
+          members: {
+            include: {
+              user: {
+                select: { id: true, name: true, email: true },
+              },
+            },
+            orderBy: { joinedAt: "asc" },
+          },
+        },
+      },
+    },
+    orderBy: { joinedAt: "asc" },
+  });
+}
+
+/** Membership cacheada ~45s entre navegaciones. */
+function getMembershipCached(userId: string) {
+  return unstable_cache(
+    () => loadMembership(userId),
+    [`household-membership-${userId}`],
+    { revalidate: 45 }
+  )();
+}
+
 export const requireHousehold = cache(async () => {
   const user = await requireUser();
 
   try {
-    const membership = await prisma.householdMember.findFirst({
-      where: { userId: user.id },
-      include: {
-        household: {
-          include: {
-            members: {
-              include: {
-                user: {
-                  select: { id: true, name: true, email: true },
-                },
-              },
-              orderBy: { joinedAt: "asc" },
-            },
-          },
-        },
-      },
-      orderBy: { joinedAt: "asc" },
-    });
+    const membership = await getMembershipCached(user.id);
 
     if (!membership) redirect("/onboarding");
 
@@ -149,24 +177,7 @@ export async function requireApiHousehold() {
   if (error || !user) return { ctx: null, error: error! };
 
   try {
-    // Reutiliza el cache de requireHousehold cuando se llama desde el mismo request RSC;
-    // en Route Handlers es una sola llamada.
-    const membership = await prisma.householdMember.findFirst({
-      where: { userId: user.id },
-      include: {
-        household: {
-          include: {
-            members: {
-              include: {
-                user: { select: { id: true, name: true, email: true } },
-              },
-              orderBy: { joinedAt: "asc" },
-            },
-          },
-        },
-      },
-      orderBy: { joinedAt: "asc" },
-    });
+    const membership = await getMembershipCached(user.id);
 
     if (!membership) {
       return {

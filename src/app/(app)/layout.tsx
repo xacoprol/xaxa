@@ -1,18 +1,14 @@
 import { AppShell } from "@/components/layout/app-shell";
-import { requireHousehold } from "@/lib/auth";
 
-export const dynamic = "force-dynamic";
-
-export default async function AppLayout({
+/**
+ * Layout síncrono: no espera a Supabase/Prisma.
+ * Así loading.tsx aparece al instante al cambiar de sección.
+ * La protección de rutas la hace el middleware; cada page valida datos.
+ */
+export default function AppLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
-  const { user, household } = await requireHousehold();
-
-  return (
-    <AppShell userName={user.name} householdName={household.name}>
-      {children}
-    </AppShell>
-  );
+  return <AppShell>{children}</AppShell>;
 }

@@ -9,6 +9,13 @@ const nextConfig = {
       },
     ],
   },
+  // Cachea el RSC de secciones en el cliente → volver a una sección es instantáneo
+  experimental: {
+    staleTimes: {
+      dynamic: 60,
+      static: 300,
+    },
+  },
 };
 
 export default nextConfig;

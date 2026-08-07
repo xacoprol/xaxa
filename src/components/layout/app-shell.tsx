@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import {
   Home,
@@ -12,8 +11,9 @@ import {
   X,
   Settings,
 } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useTransition } from "react";
 import { BrandLogo } from "@/components/brand/logo";
+import { SectionSkeleton } from "@/components/layout/section-skeleton";
 import { cn } from "@/lib/utils";
 import { createClient } from "@/lib/supabase/client";
 import { MODULE_ACCENTS } from "@/lib/constants";
@@ -46,66 +46,116 @@ const nav = [
   },
 ] as const;
 
-function NavLink({
-  href,
-  className,
-  children,
-  onNavigate,
-}: {
-  href: string;
-  className: string;
-  children: React.ReactNode;
-  onNavigate?: () => void;
-}) {
-  const router = useRouter();
+const ME_KEY = "xaxa-me";
+
+type MeInfo = { userName: string; householdName: string };
+
+function readMeCache(): MeInfo | null {
+  try {
+    const raw = sessionStorage.getItem(ME_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as MeInfo;
+    if (parsed?.userName && parsed?.householdName) return parsed;
+  } catch {
+    // ignore
+  }
+  return null;
+}
+
+function writeMeCache(info: MeInfo) {
+  try {
+    sessionStorage.setItem(ME_KEY, JSON.stringify(info));
+  } catch {
+    // ignore
+  }
+}
+
+function isActivePath(pathname: string, href: string) {
   return (
-    <Link
-      href={href}
-      prefetch
-      className={className}
-      onClick={onNavigate}
-      onPointerEnter={() => router.prefetch(href)}
-      onTouchStart={() => router.prefetch(href)}
-    >
-      {children}
-    </Link>
+    pathname === href ||
+    (href !== "/dashboard" && pathname.startsWith(href))
   );
 }
 
-export function AppShell({
-  children,
-  userName,
-  householdName,
-}: {
-  children: React.ReactNode;
-  userName: string;
-  householdName: string;
-}) {
+export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
   const [open, setOpen] = useState(false);
+  const [me, setMe] = useState<MeInfo | null>(null);
+  const [isPending, startTransition] = useTransition();
+  const [displayPath, setDisplayPath] = useState(pathname);
 
-  // Precarga el resto de secciones en idle para navegación más rápida
   useEffect(() => {
-    const run = () => {
-      for (const item of nav) {
-        if (item.href !== pathname) router.prefetch(item.href);
+    setDisplayPath(pathname);
+  }, [pathname]);
+
+  useEffect(() => {
+    const cached = readMeCache();
+    if (cached) setMe(cached);
+
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch("/api/me");
+        if (!res.ok) return;
+        const data = (await res.json()) as MeInfo;
+        if (cancelled || !data.userName) return;
+        writeMeCache(data);
+        setMe(data);
+      } catch {
+        // shell works without names
       }
+    })();
+    return () => {
+      cancelled = true;
     };
-    if (typeof window !== "undefined" && "requestIdleCallback" in window) {
-      const id = window.requestIdleCallback(run, { timeout: 2000 });
-      return () => window.cancelIdleCallback(id);
+  }, []);
+
+  // Precarga TODAS las secciones al entrar (y al volver a la app)
+  useEffect(() => {
+    function warm() {
+      for (const item of nav) {
+        router.prefetch(item.href);
+      }
     }
-    const t = window.setTimeout(run, 400);
-    return () => window.clearTimeout(t);
-  }, [pathname, router]);
+    warm();
+    const onFocus = () => warm();
+    window.addEventListener("focus", onFocus);
+    document.addEventListener("visibilitychange", () => {
+      if (document.visibilityState === "visible") warm();
+    });
+    return () => {
+      window.removeEventListener("focus", onFocus);
+    };
+  }, [router]);
+
+  function go(href: string) {
+    if (isActivePath(pathname, href) && !isPending) {
+      setOpen(false);
+      return;
+    }
+    setOpen(false);
+    setDisplayPath(href); // pestaña activa al instante
+    startTransition(() => {
+      router.push(href);
+    });
+  }
 
   async function signOut() {
+    try {
+      sessionStorage.removeItem(ME_KEY);
+    } catch {
+      // ignore
+    }
     const supabase = createClient();
     await supabase.auth.signOut();
     router.push("/login");
     router.refresh();
   }
+
+  const householdName = me?.householdName ?? "";
+  const userName = me?.userName ?? "";
+  const activePath = displayPath;
 
   return (
     <div className="min-h-dvh bg-[radial-gradient(ellipse_at_top,_#eef7f4_0%,_#f4f7f6_45%,_#e2ebe8_100%)]">
@@ -122,15 +172,19 @@ export function AppShell({
             </button>
             <div className="flex items-center gap-2.5">
               <BrandLogo href="/dashboard" size="sm" />
-              <span className="hidden text-xs font-medium uppercase tracking-widest text-stone-400 sm:inline">
-                {householdName}
-              </span>
+              {householdName ? (
+                <span className="hidden text-xs font-medium uppercase tracking-widest text-stone-400 sm:inline">
+                  {householdName}
+                </span>
+              ) : null}
             </div>
           </div>
           <div className="flex items-center gap-3">
-            <span className="hidden text-sm text-stone-500 sm:inline">
-              {userName}
-            </span>
+            {userName ? (
+              <span className="hidden text-sm text-stone-500 sm:inline">
+                {userName}
+              </span>
+            ) : null}
             <button
               type="button"
               onClick={signOut}
@@ -146,18 +200,16 @@ export function AppShell({
           <nav className="border-t border-stone-100 bg-white px-4 py-3 md:hidden">
             <ul className="space-y-1">
               {nav.map((item) => {
-                const active =
-                  pathname === item.href ||
-                  (item.href !== "/dashboard" &&
-                    pathname.startsWith(item.href));
+                const active = isActivePath(activePath, item.href);
                 const Icon = item.icon;
                 return (
                   <li key={item.href}>
-                    <NavLink
-                      href={item.href}
-                      onNavigate={() => setOpen(false)}
+                    <button
+                      type="button"
+                      onClick={() => go(item.href)}
+                      onPointerEnter={() => router.prefetch(item.href)}
                       className={cn(
-                        "flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium",
+                        "flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left text-sm font-medium",
                         active
                           ? "bg-navy text-white"
                           : "text-stone-600 hover:bg-stone-50"
@@ -165,7 +217,7 @@ export function AppShell({
                     >
                       <Icon className="h-4 w-4" />
                       {item.label}
-                    </NavLink>
+                    </button>
                   </li>
                 );
               })}
@@ -178,16 +230,16 @@ export function AppShell({
         <aside className="hidden w-48 shrink-0 md:block">
           <nav className="sticky top-[calc(5rem+env(safe-area-inset-top))] space-y-1">
             {nav.map((item) => {
-              const active =
-                pathname === item.href ||
-                (item.href !== "/dashboard" && pathname.startsWith(item.href));
+              const active = isActivePath(activePath, item.href);
               const Icon = item.icon;
               return (
-                <NavLink
+                <button
                   key={item.href}
-                  href={item.href}
+                  type="button"
+                  onClick={() => go(item.href)}
+                  onPointerEnter={() => router.prefetch(item.href)}
                   className={cn(
-                    "flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-colors",
+                    "flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm font-medium transition-colors",
                     active
                       ? "bg-navy text-white shadow-sm"
                       : "text-stone-600 hover:bg-white hover:text-navy"
@@ -201,28 +253,31 @@ export function AppShell({
                       style={{ backgroundColor: item.accent.hex }}
                     />
                   )}
-                </NavLink>
+                </button>
               );
             })}
           </nav>
         </aside>
 
-        <main className="min-w-0 flex-1">{children}</main>
+        <main className="min-w-0 flex-1">
+          {isPending ? <SectionSkeleton /> : children}
+        </main>
       </div>
 
       <nav className="fixed inset-x-0 bottom-0 z-40 border-t border-stone-200 bg-white/95 backdrop-blur-md md:hidden">
         <ul className="mx-auto flex max-w-lg items-stretch justify-around px-2 pb-[env(safe-area-inset-bottom)]">
           {nav.map((item) => {
-            const active =
-              pathname === item.href ||
-              (item.href !== "/dashboard" && pathname.startsWith(item.href));
+            const active = isActivePath(activePath, item.href);
             const Icon = item.icon;
             return (
               <li key={item.href} className="flex-1">
-                <NavLink
-                  href={item.href}
+                <button
+                  type="button"
+                  onClick={() => go(item.href)}
+                  onPointerEnter={() => router.prefetch(item.href)}
+                  onTouchStart={() => router.prefetch(item.href)}
                   className={cn(
-                    "flex flex-col items-center gap-0.5 py-2 text-[10px] font-medium",
+                    "flex w-full flex-col items-center gap-0.5 py-2 text-[10px] font-medium",
                     active ? "text-navy" : "text-stone-400"
                   )}
                 >
@@ -230,7 +285,7 @@ export function AppShell({
                     className={cn("h-5 w-5", active && "stroke-[2.25px]")}
                   />
                   {item.label}
-                </NavLink>
+                </button>
               </li>
             );
           })}

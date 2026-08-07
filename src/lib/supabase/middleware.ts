@@ -25,7 +25,7 @@ export async function updateSession(request: NextRequest) {
     isAuthForm ||
     isResetPassword ||
     path.startsWith("/auth") ||
-    isApi; // las APIs gestionan su propia auth (401/403)
+    isApi;
 
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
@@ -68,11 +68,12 @@ export async function updateSession(request: NextRequest) {
       },
     });
 
+    // getSession = local/JWT (rápido). Evita round-trip a Auth en cada navegación.
     const {
-      data: { user },
-    } = await supabase.auth.getUser();
+      data: { session },
+    } = await supabase.auth.getSession();
+    const user = session?.user ?? null;
 
-    // No redirigir rutas API desde el middleware
     if (!isApi) {
       if (!user && !isPublic) {
         const redirectUrl = request.nextUrl.clone();
