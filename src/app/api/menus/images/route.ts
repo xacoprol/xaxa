@@ -6,7 +6,7 @@ import { z } from "zod";
 
 export const maxDuration = 60;
 
-/** Genera fotos para comidas sin imageUrl (por ids o por weekStart). */
+/** Genera fotos para comidas sin imageUrl (por ids). */
 export async function POST(request: Request) {
   const { ctx, error } = await requireApiHousehold();
   if (error || !ctx) return error!;
@@ -37,21 +37,36 @@ export async function POST(request: Request) {
     take: force ? Math.min(limit, body.data.mealIds!.length) : limit,
   });
 
+  if (!meals.length) {
+    return NextResponse.json({
+      updated: [],
+      remaining: 0,
+      done: true,
+      error: "No hay platos pendientes de foto",
+    });
+  }
+
   const updated: { id: string; imageUrl: string }[] = [];
+  const errors: string[] = [];
 
   for (const meal of meals) {
-    const imageUrl = await attachMealImage({
-      householdId: ctx.household.id,
-      mealId: meal.id,
-      name: meal.name,
-      tags: meal.tags,
-    });
-    if (!imageUrl) continue;
-    await prisma.meal.update({
-      where: { id: meal.id },
-      data: { imageUrl },
-    });
-    updated.push({ id: meal.id, imageUrl });
+    try {
+      const imageUrl = await attachMealImage({
+        householdId: ctx.household.id,
+        mealId: meal.id,
+        name: meal.name,
+        tags: meal.tags,
+      });
+      await prisma.meal.update({
+        where: { id: meal.id },
+        data: { imageUrl },
+      });
+      updated.push({ id: meal.id, imageUrl });
+    } catch (e) {
+      const message = e instanceof Error ? e.message : "Error generando foto";
+      console.error("[menus/images]", meal.id, message);
+      errors.push(`${meal.name}: ${message}`);
+    }
   }
 
   const remaining = await prisma.meal.count({
@@ -64,9 +79,17 @@ export async function POST(request: Request) {
     },
   });
 
+  if (!updated.length && errors.length) {
+    return NextResponse.json(
+      { error: errors[0], updated: [], remaining, done: false },
+      { status: 502 }
+    );
+  }
+
   return NextResponse.json({
     updated,
     remaining,
     done: remaining === 0,
+    errors: errors.length ? errors : undefined,
   });
 }

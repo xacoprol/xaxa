@@ -19,70 +19,72 @@ function adminStorage() {
 export async function generateMealImageBuffer(
   dishName: string,
   tags: string[] = []
-): Promise<Buffer | null> {
+): Promise<Buffer> {
   const apiKey = process.env.OPENAI_API_KEY;
-  if (!apiKey) return null;
+  if (!apiKey) {
+    throw new Error("Falta OPENAI_API_KEY");
+  }
 
   const openai = new OpenAI({ apiKey });
-  const tagLine = tags.length ? ` Estilo: ${tags.slice(0, 4).join(", ")}.` : "";
+  const tagLine = tags.length ? ` Style: ${tags.slice(0, 4).join(", ")}.` : "";
   const prompt = `Professional food photography of "${dishName}", homemade Spanish/Mediterranean home cooking, plated appetizingly on a ceramic plate, natural daylight, shallow depth of field, no text, no watermark, no people.${tagLine}`;
 
-  try {
-    const result = await openai.images.generate({
-      model: "dall-e-3",
-      prompt,
-      size: "1024x1024",
-      quality: "standard",
-      n: 1,
-      response_format: "b64_json",
-    });
-    const b64 = result.data?.[0]?.b64_json;
-    if (!b64) return null;
+  // gpt-image-* (dall-e-3 ya no disponible en muchas cuentas)
+  const result = await openai.images.generate({
+    model: "gpt-image-1-mini",
+    prompt,
+    size: "1024x1024",
+  });
+
+  const b64 = result.data?.[0]?.b64_json;
+  if (b64) {
     return Buffer.from(b64, "base64");
-  } catch (error) {
-    console.error("[meal-images] generate failed:", error);
-    return null;
   }
+
+  const imageUrl = result.data?.[0]?.url;
+  if (imageUrl) {
+    const res = await fetch(imageUrl);
+    if (!res.ok) {
+      throw new Error(`No se pudo descargar la imagen (${res.status})`);
+    }
+    return Buffer.from(await res.arrayBuffer());
+  }
+
+  throw new Error("OpenAI no devolvió imagen");
 }
 
 export async function uploadMealImage(
   householdId: string,
   mealId: string,
   buffer: Buffer
-): Promise<string | null> {
-  try {
-    const supabase = adminStorage();
-    const path = `${householdId}/${mealId}.png`;
-    const { error } = await supabase.storage
-      .from(MEAL_IMAGES_BUCKET)
-      .upload(path, buffer, {
-        contentType: "image/png",
-        upsert: true,
-      });
+): Promise<string> {
+  const supabase = adminStorage();
+  const path = `${householdId}/${mealId}.png`;
+  const { error } = await supabase.storage
+    .from(MEAL_IMAGES_BUCKET)
+    .upload(path, buffer, {
+      contentType: "image/png",
+      upsert: true,
+    });
 
-    if (error) {
-      console.error("[meal-images] upload failed:", error.message);
-      return null;
-    }
-
-    const { data } = supabase.storage
-      .from(MEAL_IMAGES_BUCKET)
-      .getPublicUrl(path);
-    return data.publicUrl || null;
-  } catch (error) {
-    console.error("[meal-images] upload unexpected:", error);
-    return null;
+  if (error) {
+    throw new Error(`Error al subir foto: ${error.message}`);
   }
+
+  const { data } = supabase.storage.from(MEAL_IMAGES_BUCKET).getPublicUrl(path);
+  if (!data.publicUrl) {
+    throw new Error("No se pudo obtener la URL pública de la foto");
+  }
+  return data.publicUrl;
 }
 
-/** Generate + upload; returns public URL or null (never throws). */
+/** Generate + upload; throws on failure with a clear message. */
 export async function attachMealImage(opts: {
   householdId: string;
   mealId: string;
   name: string;
   tags?: string[];
-}): Promise<string | null> {
+}): Promise<string> {
   const buffer = await generateMealImageBuffer(opts.name, opts.tags ?? []);
-  if (!buffer) return null;
   return uploadMealImage(opts.householdId, opts.mealId, buffer);
 }
