@@ -12,7 +12,7 @@ import {
   X,
   Settings,
 } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { BrandLogo } from "@/components/brand/logo";
 import { cn } from "@/lib/utils";
 import { createClient } from "@/lib/supabase/client";
@@ -46,6 +46,32 @@ const nav = [
   },
 ] as const;
 
+function NavLink({
+  href,
+  className,
+  children,
+  onNavigate,
+}: {
+  href: string;
+  className: string;
+  children: React.ReactNode;
+  onNavigate?: () => void;
+}) {
+  const router = useRouter();
+  return (
+    <Link
+      href={href}
+      prefetch
+      className={className}
+      onClick={onNavigate}
+      onPointerEnter={() => router.prefetch(href)}
+      onTouchStart={() => router.prefetch(href)}
+    >
+      {children}
+    </Link>
+  );
+}
+
 export function AppShell({
   children,
   userName,
@@ -59,6 +85,21 @@ export function AppShell({
   const router = useRouter();
   const [open, setOpen] = useState(false);
 
+  // Precarga el resto de secciones en idle para navegación más rápida
+  useEffect(() => {
+    const run = () => {
+      for (const item of nav) {
+        if (item.href !== pathname) router.prefetch(item.href);
+      }
+    };
+    if (typeof window !== "undefined" && "requestIdleCallback" in window) {
+      const id = window.requestIdleCallback(run, { timeout: 2000 });
+      return () => window.cancelIdleCallback(id);
+    }
+    const t = window.setTimeout(run, 400);
+    return () => window.clearTimeout(t);
+  }, [pathname, router]);
+
   async function signOut() {
     const supabase = createClient();
     await supabase.auth.signOut();
@@ -68,7 +109,6 @@ export function AppShell({
 
   return (
     <div className="min-h-dvh bg-[radial-gradient(ellipse_at_top,_#eef7f4_0%,_#f4f7f6_45%,_#e2ebe8_100%)]">
-      {/* Top bar — safe-area para notch / Dynamic Island en PWA */}
       <header className="sticky top-0 z-40 border-b border-stone-200/80 bg-white/80 pt-[env(safe-area-inset-top)] backdrop-blur-md">
         <div className="mx-auto flex h-14 max-w-5xl items-center justify-between px-4">
           <div className="flex items-center gap-3">
@@ -102,7 +142,6 @@ export function AppShell({
           </div>
         </div>
 
-        {/* Mobile drawer */}
         {open && (
           <nav className="border-t border-stone-100 bg-white px-4 py-3 md:hidden">
             <ul className="space-y-1">
@@ -114,9 +153,9 @@ export function AppShell({
                 const Icon = item.icon;
                 return (
                   <li key={item.href}>
-                    <Link
+                    <NavLink
                       href={item.href}
-                      onClick={() => setOpen(false)}
+                      onNavigate={() => setOpen(false)}
                       className={cn(
                         "flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium",
                         active
@@ -126,7 +165,7 @@ export function AppShell({
                     >
                       <Icon className="h-4 w-4" />
                       {item.label}
-                    </Link>
+                    </NavLink>
                   </li>
                 );
               })}
@@ -136,7 +175,6 @@ export function AppShell({
       </header>
 
       <div className="mx-auto flex max-w-5xl gap-8 px-4 py-6 pb-[calc(6rem+env(safe-area-inset-bottom))] md:pb-8">
-        {/* Desktop sidebar */}
         <aside className="hidden w-48 shrink-0 md:block">
           <nav className="sticky top-[calc(5rem+env(safe-area-inset-top))] space-y-1">
             {nav.map((item) => {
@@ -145,7 +183,7 @@ export function AppShell({
                 (item.href !== "/dashboard" && pathname.startsWith(item.href));
               const Icon = item.icon;
               return (
-                <Link
+                <NavLink
                   key={item.href}
                   href={item.href}
                   className={cn(
@@ -163,7 +201,7 @@ export function AppShell({
                       style={{ backgroundColor: item.accent.hex }}
                     />
                   )}
-                </Link>
+                </NavLink>
               );
             })}
           </nav>
@@ -172,7 +210,6 @@ export function AppShell({
         <main className="min-w-0 flex-1">{children}</main>
       </div>
 
-      {/* Mobile bottom nav */}
       <nav className="fixed inset-x-0 bottom-0 z-40 border-t border-stone-200 bg-white/95 backdrop-blur-md md:hidden">
         <ul className="mx-auto flex max-w-lg items-stretch justify-around px-2 pb-[env(safe-area-inset-bottom)]">
           {nav.map((item) => {
@@ -182,7 +219,7 @@ export function AppShell({
             const Icon = item.icon;
             return (
               <li key={item.href} className="flex-1">
-                <Link
+                <NavLink
                   href={item.href}
                   className={cn(
                     "flex flex-col items-center gap-0.5 py-2 text-[10px] font-medium",
@@ -193,7 +230,7 @@ export function AppShell({
                     className={cn("h-5 w-5", active && "stroke-[2.25px]")}
                   />
                   {item.label}
-                </Link>
+                </NavLink>
               </li>
             );
           })}

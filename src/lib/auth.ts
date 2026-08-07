@@ -13,10 +13,11 @@ export const getSessionUser = cache(async () => {
       return null;
     }
     const supabase = createClient();
+    // getSession lee la cookie local (rápido). El middleware ya validó con getUser.
     const {
-      data: { user },
-    } = await supabase.auth.getUser();
-    return user;
+      data: { session },
+    } = await supabase.auth.getSession();
+    return session?.user ?? null;
   } catch (error) {
     console.error("[auth] getSessionUser:", error);
     return null;

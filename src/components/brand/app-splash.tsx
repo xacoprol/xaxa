@@ -3,6 +3,8 @@
 import { useEffect, useState } from "react";
 import { cn } from "@/lib/utils";
 
+const SPLASH_KEY = "xaxa-splash-done";
+
 /** Posición de la X dentro del icono original (569×554). */
 const X_SLOT = {
   left: "57.47%",
@@ -11,14 +13,21 @@ const X_SLOT = {
   height: "43.68%",
 } as const;
 
-/** Splash al abrir la app: icono real; solo la X verde gira. */
+/** Splash solo en la primera apertura de la sesión. */
 export function AppSplash() {
-  const [visible, setVisible] = useState(true);
+  const [visible, setVisible] = useState(false);
   const [fading, setFading] = useState(false);
 
   useEffect(() => {
+    try {
+      if (sessionStorage.getItem(SPLASH_KEY)) return;
+    } catch {
+      // private mode
+    }
+
     let cancelled = false;
-    const minMs = 1100;
+    setVisible(true);
+    const minMs = 700;
     const started = Date.now();
 
     function hide() {
@@ -27,9 +36,14 @@ export function AppSplash() {
       window.setTimeout(() => {
         if (cancelled) return;
         setFading(true);
+        try {
+          sessionStorage.setItem(SPLASH_KEY, "1");
+        } catch {
+          // ignore
+        }
         window.setTimeout(() => {
           if (!cancelled) setVisible(false);
-        }, 420);
+        }, 320);
       }, wait);
     }
 
@@ -39,7 +53,7 @@ export function AppSplash() {
       window.addEventListener("load", hide, { once: true });
     }
 
-    const safety = window.setTimeout(hide, 2800);
+    const safety = window.setTimeout(hide, 1800);
     return () => {
       cancelled = true;
       window.clearTimeout(safety);
@@ -52,7 +66,7 @@ export function AppSplash() {
   return (
     <div
       className={cn(
-        "fixed inset-0 z-[200] flex items-center justify-center bg-[radial-gradient(ellipse_at_top,_#eef7f4_0%,_#f4f7f6_45%,_#e2ebe8_100%)] transition-opacity duration-[420ms] ease-out",
+        "fixed inset-0 z-[200] flex items-center justify-center bg-[radial-gradient(ellipse_at_top,_#eef7f4_0%,_#f4f7f6_45%,_#e2ebe8_100%)] transition-opacity duration-300 ease-out",
         fading && "pointer-events-none opacity-0"
       )}
       aria-hidden={fading}

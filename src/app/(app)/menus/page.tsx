@@ -16,10 +16,37 @@ export default async function MenusPage() {
         },
       },
       include: {
-        meals: { orderBy: [{ dayOfWeek: "asc" }, { mealType: "asc" }] },
+        meals: {
+          orderBy: [{ dayOfWeek: "asc" }, { mealType: "asc" }],
+          // Lista ligera: detalle (ingredientes/pasos) se carga al abrir
+          select: {
+            id: true,
+            dayOfWeek: true,
+            mealType: true,
+            name: true,
+            description: true,
+            servings: true,
+            difficulty: true,
+            tags: true,
+            imageUrl: true,
+            prepMins: true,
+            cookMins: true,
+            estimatedMins: true,
+            isFavorite: true,
+          },
+        },
       },
     }),
-    prisma.menuPreference.findUnique({ where: { userId: user.id } }),
+    prisma.menuPreference.findUnique({
+      where: { userId: user.id },
+      select: {
+        allergies: true,
+        dislikes: true,
+        goal: true,
+        mealsPerWeek: true,
+        extraNotes: true,
+      },
+    }),
   ]);
 
   return (
@@ -42,8 +69,8 @@ export default async function MenusPage() {
         mealType: m.mealType,
         name: m.name,
         description: m.description,
-        ingredients: m.ingredients,
-        steps: m.steps,
+        ingredients: [],
+        steps: [],
         servings: m.servings,
         difficulty: m.difficulty,
         tags: m.tags,
@@ -52,6 +79,7 @@ export default async function MenusPage() {
         cookMins: m.cookMins,
         estimatedMins: m.estimatedMins,
         isFavorite: m.isFavorite,
+        detailLoaded: false,
       }))}
     />
   );

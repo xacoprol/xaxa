@@ -1,7 +1,6 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useRouter } from "next/navigation";
 import {
   Check,
   Clock,
@@ -39,6 +38,8 @@ type Meal = {
   cookMins?: number | null;
   estimatedMins: number | null;
   isFavorite: boolean;
+  /** false = falta cargar ingredientes/pasos */
+  detailLoaded?: boolean;
 };
 
 type Recipe = {
@@ -116,6 +117,46 @@ function formatIngredient(ing: unknown): string {
   return String(ing);
 }
 
+/** Convierte cualquier imagen (incl. HEIC en Safari) a JPEG para Vision. */
+async function imageFileToJpeg(file: File): Promise<File> {
+  const type = (file.type || "").toLowerCase();
+  if (
+    type === "image/jpeg" ||
+    type === "image/jpg" ||
+    type === "image/png" ||
+    type === "image/webp"
+  ) {
+    if (file.size <= 4 * 1024 * 1024) return file;
+  }
+
+  const bitmap = await createImageBitmap(file);
+  const maxSide = 2000;
+  const scale = Math.min(1, maxSide / Math.max(bitmap.width, bitmap.height));
+  const w = Math.max(1, Math.round(bitmap.width * scale));
+  const h = Math.max(1, Math.round(bitmap.height * scale));
+  const canvas = document.createElement("canvas");
+  canvas.width = w;
+  canvas.height = h;
+  const ctx = canvas.getContext("2d");
+  if (!ctx) {
+    bitmap.close();
+    throw new Error("No se pudo procesar la imagen");
+  }
+  ctx.drawImage(bitmap, 0, 0, w, h);
+  bitmap.close();
+
+  const blob = await new Promise<Blob>((resolve, reject) => {
+    canvas.toBlob(
+      (b) => (b ? resolve(b) : reject(new Error("No se pudo convertir a JPG"))),
+      "image/jpeg",
+      0.88
+    );
+  });
+
+  const base = file.name.replace(/\.[^.]+$/, "") || "ticket";
+  return new File([blob], `${base}.jpg`, { type: "image/jpeg" });
+}
+
 type TicketReviewItem = {
   name: string;
   suggestedPrice: number;
@@ -146,7 +187,6 @@ export function MenusView({
   meals: Meal[];
   preferenceInitial: PreferenceInitial | null;
 }) {
-  const router = useRouter();
   const [meals, setMeals] = useState<Meal[]>(initialMeals);
   const [generating, setGenerating] = useState(false);
   const [imaging, setImaging] = useState(false);
@@ -211,10 +251,9 @@ export function MenusView({
         }
       } finally {
         setImaging(false);
-        router.refresh();
       }
     },
-    [router]
+    []
   );
 
   useEffect(() => {
@@ -281,11 +320,13 @@ export function MenusView({
       return;
     }
 
-    const nextMeals = (data.menu?.meals ?? []) as Meal[];
+    const nextMeals = ((data.menu?.meals ?? []) as Meal[]).map((m) => ({
+      ...m,
+      detailLoaded: true,
+    }));
     setMeals(nextMeals);
     setGenerating(false);
     setRegenDay(null);
-    router.refresh();
 
     const ids = days
       ? nextMeals.filter((m) => days.includes(m.dayOfWeek)).map((m) => m.id)
@@ -310,7 +351,10 @@ export function MenusView({
       return;
     }
 
-    const nextMeals = (data.menu?.meals ?? []) as Meal[];
+    const nextMeals = ((data.menu?.meals ?? []) as Meal[]).map((m) => ({
+      ...m,
+      detailLoaded: true,
+    }));
     setMeals(nextMeals);
     setRegenMealId(null);
 
@@ -324,8 +368,30 @@ export function MenusView({
       setSelected(null);
     }
 
-    router.refresh();
     if (replacement) void fillImages([replacement.id]);
+  }
+
+  async function openMeal(meal: Meal) {
+    if (meal.detailLoaded !== false && (meal.steps?.length ?? 0) > 0) {
+      setSelected({ kind: "meal", ...meal });
+      return;
+    }
+
+    setSelected({ kind: "meal", ...meal });
+    try {
+      const res = await fetch(`/api/menus/meals/${meal.id}`);
+      const data = await res.json();
+      if (!res.ok || !data.meal) return;
+      const full = { ...data.meal, detailLoaded: true } as Meal;
+      setMeals((prev) => prev.map((m) => (m.id === full.id ? { ...m, ...full } : m)));
+      setSelected((prev) =>
+        prev?.kind === "meal" && prev.id === full.id
+          ? { kind: "meal", ...full }
+          : prev
+      );
+    } catch {
+      // Se queda con lo que haya en tarjeta
+    }
   }
 
   async function toggleFavorite(id: string) {
@@ -444,8 +510,15 @@ export function MenusView({
     setTicketLoading(true);
     setError(null);
     try {
+      let upload = file;
+      try {
+        upload = await imageFileToJpeg(file);
+      } catch {
+        // Si no se puede convertir (HEIC en algunos navegadores), subimos original
+        upload = file;
+      }
       const form = new FormData();
-      form.append("file", file);
+      form.append("file", upload);
       const res = await fetch("/api/menus/ticket-prices", {
         method: "POST",
         body: form,
@@ -473,6 +546,8 @@ export function MenusView({
           selected: true,
         })),
       });
+    } catch {
+      setError("No se pudo leer el ticket. Prueba con otra foto más nítida.");
     } finally {
       setTicketLoading(false);
       if (ticketInputRef.current) ticketInputRef.current.value = "";
@@ -694,14 +769,12 @@ export function MenusView({
                     .map((slot) => (
                       <div
                         key={slot.key}
-                        className="w-[78%] max-w-[17.5rem] shrink-0 snap-start sm:w-auto sm:max-w-none sm:shrink"
+                        className="flex w-[78%] max-w-[17.5rem] shrink-0 snap-start sm:w-auto sm:max-w-none sm:shrink"
                       >
                         <MealCard
                           label={slot.label}
                           meal={slot.meal}
-                          onOpen={(m) =>
-                            setSelected({ kind: "meal", ...m })
-                          }
+                          onOpen={openMeal}
                           onFavorite={toggleFavorite}
                           onReplace={(m) => setConfirmReplace(m)}
                           replaceLoading={
@@ -1181,13 +1254,15 @@ function MealCard({
 }) {
   if (!meal) {
     return (
-      <div className="overflow-hidden rounded-2xl border border-dashed border-stone-200 bg-stone-50/80">
-        <div className="aspect-[4/3] bg-stone-100" />
-        <div className="p-3">
+      <div className="flex h-full w-full flex-col overflow-hidden rounded-2xl border border-dashed border-stone-200 bg-stone-50/80">
+        <div className="aspect-[4/3] shrink-0 bg-stone-100" />
+        <div className="flex flex-1 flex-col p-3">
           <p className="text-[10px] uppercase tracking-wide text-stone-400">
             {label}
           </p>
-          <p className="text-sm text-stone-300">Sin plato</p>
+          <p className="mt-0.5 min-h-[2.5em] text-sm leading-snug text-stone-300">
+            Sin plato
+          </p>
         </div>
       </div>
     );
@@ -1198,8 +1273,8 @@ function MealCard({
   const missingPhoto = !meal.imageUrl;
 
   return (
-    <div className="group overflow-hidden rounded-2xl border border-stone-200/80 bg-white shadow-soft">
-      <div className="relative">
+    <div className="group flex h-full w-full flex-col overflow-hidden rounded-2xl border border-stone-200/80 bg-white shadow-soft">
+      <div className="relative shrink-0">
         <button
           type="button"
           onClick={() => onOpen(meal)}
@@ -1216,7 +1291,7 @@ function MealCard({
           />
         </button>
       </div>
-      <div className="flex items-start gap-2 p-3">
+      <div className="flex flex-1 items-start gap-2 p-3">
         <button
           type="button"
           onClick={() => onOpen(meal)}
@@ -1225,7 +1300,9 @@ function MealCard({
           <p className="text-[10px] uppercase tracking-wide text-amber-700/70">
             {label}
           </p>
-          <p className="font-medium text-stone-900">{meal.name}</p>
+          <p className="mt-0.5 line-clamp-2 min-h-[2.5em] font-medium leading-snug text-stone-900">
+            {meal.name}
+          </p>
           <p className="mt-1 flex flex-wrap gap-x-2 gap-y-0.5 text-xs text-stone-500">
             <span>{DIFFICULTY_LABEL[difficulty]}</span>
             {mins != null && <span>· {mins} min</span>}
@@ -1412,26 +1489,34 @@ function RecipeSheet({
           <h4 className="mt-6 text-sm font-semibold text-stone-800">
             Ingredientes
           </h4>
-          <ul className="mt-2 space-y-1.5 text-sm text-stone-600">
-            {ingredients.map((ing, i) => (
-              <li key={i} className="flex gap-2">
-                <span className="mt-2 h-1 w-1 shrink-0 rounded-full bg-amber-500" />
-                <span>{formatIngredient(ing)}</span>
-              </li>
-            ))}
-          </ul>
+          {ingredients.length === 0 && item.kind === "meal" ? (
+            <p className="mt-2 text-sm text-stone-400">Cargando receta…</p>
+          ) : (
+            <ul className="mt-2 space-y-1.5 text-sm text-stone-600">
+              {ingredients.map((ing, i) => (
+                <li key={i} className="flex gap-2">
+                  <span className="mt-2 h-1 w-1 shrink-0 rounded-full bg-amber-500" />
+                  <span>{formatIngredient(ing)}</span>
+                </li>
+              ))}
+            </ul>
+          )}
 
           <h4 className="mt-6 text-sm font-semibold text-stone-800">Pasos</h4>
-          <ol className="mt-2 space-y-3">
-            {item.steps.map((s, i) => (
-              <li key={i} className="flex gap-3 text-sm text-stone-700">
-                <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-navy text-[11px] font-semibold text-white">
-                  {i + 1}
-                </span>
-                <span className="pt-0.5 leading-relaxed">{s}</span>
-              </li>
-            ))}
-          </ol>
+          {item.steps.length === 0 && item.kind === "meal" ? (
+            <p className="mt-2 text-sm text-stone-400">Cargando pasos…</p>
+          ) : (
+            <ol className="mt-2 space-y-3">
+              {item.steps.map((s, i) => (
+                <li key={i} className="flex gap-3 text-sm text-stone-700">
+                  <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-navy text-[11px] font-semibold text-white">
+                    {i + 1}
+                  </span>
+                  <span className="pt-0.5 leading-relaxed">{s}</span>
+                </li>
+              ))}
+            </ol>
+          )}
 
           {item.kind === "meal" && onReplace && (
             <Button
