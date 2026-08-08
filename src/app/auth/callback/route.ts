@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { createServerClient } from "@supabase/ssr";
+import { createServerClient, type CookieOptions } from "@supabase/ssr";
 import { cookies } from "next/headers";
 import { prisma } from "@/lib/prisma";
 import { canRegisterNewUser } from "@/lib/app-config";
@@ -20,6 +20,7 @@ export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const code = searchParams.get("code");
   const next = searchParams.get("next") ?? "/onboarding";
+  const type = searchParams.get("type");
   const origin = siteOrigin(request);
 
   if (!code) {
@@ -27,7 +28,15 @@ export async function GET(request: Request) {
   }
 
   const allowedNext = new Set(["/onboarding", "/dashboard", "/reset-password"]);
-  const safeNext = allowedNext.has(next) ? next : "/onboarding";
+  const isRecovery =
+    next === "/reset-password" ||
+    type === "recovery" ||
+    type === "invite";
+  const safeNext = isRecovery
+    ? "/reset-password"
+    : allowedNext.has(next)
+      ? next
+      : "/onboarding";
 
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
@@ -38,6 +47,12 @@ export async function GET(request: Request) {
 
   try {
     const cookieStore = cookies();
+    const pendingCookies: {
+      name: string;
+      value: string;
+      options: CookieOptions;
+    }[] = [];
+
     const supabase = createServerClient(supabaseUrl, anonKey, {
       cookies: {
         getAll() {
@@ -46,6 +61,7 @@ export async function GET(request: Request) {
         setAll(cookiesToSet) {
           cookiesToSet.forEach(({ name, value, options }) => {
             cookieStore.set(name, value, options);
+            pendingCookies.push({ name, value, options });
           });
         },
       },
@@ -54,49 +70,61 @@ export async function GET(request: Request) {
     const { data, error } = await supabase.auth.exchangeCodeForSession(code);
     if (error || !data.user) {
       console.error("[auth/callback] exchange failed:", error?.message);
-      return NextResponse.redirect(`${origin}/login?error=auth`);
+      return NextResponse.redirect(
+        `${origin}${
+          isRecovery ? "/reset-password?error=link" : "/login?error=auth"
+        }`
+      );
     }
 
-    try {
-      const existing = await prisma.user.findUnique({
-        where: { id: data.user.id },
-      });
+    let destination = safeNext;
 
-      if (!existing) {
-        const gate = await canRegisterNewUser();
-        if (gate.allowed) {
-          await prisma.user.create({
-            data: {
-              id: data.user.id,
-              email: data.user.email!,
-              name:
-                data.user.user_metadata?.name ??
-                data.user.email!.split("@")[0],
-            },
-          });
+    if (!isRecovery) {
+      try {
+        const existing = await prisma.user.findUnique({
+          where: { id: data.user.id },
+        });
+
+        if (!existing) {
+          const gate = await canRegisterNewUser();
+          if (gate.allowed) {
+            await prisma.user.create({
+              data: {
+                id: data.user.id,
+                email: data.user.email!,
+                name:
+                  data.user.user_metadata?.name ??
+                  data.user.email!.split("@")[0],
+              },
+            });
+          }
         }
-      }
 
-      const membership = await prisma.householdMember.findFirst({
-        where: { userId: data.user.id },
-      });
+        const membership = await prisma.householdMember.findFirst({
+          where: { userId: data.user.id },
+        });
 
-      // Recuperación de contraseña: respetar next aunque ya tenga hogar
-      const destination =
-        safeNext === "/reset-password"
-          ? "/reset-password"
-          : membership
-            ? "/dashboard"
-            : safeNext;
-      return NextResponse.redirect(`${origin}${destination}`);
-    } catch (dbError) {
-      console.error("[auth/callback] db error:", dbError);
-      if (safeNext === "/reset-password") {
-        return NextResponse.redirect(`${origin}/reset-password`);
+        destination = membership ? "/dashboard" : safeNext;
+      } catch (dbError) {
+        console.error("[auth/callback] db error:", dbError);
+        destination = safeNext === "/onboarding" ? "/onboarding" : safeNext;
       }
-      // Sesión ok aunque falle Prisma: manda a onboarding
-      return NextResponse.redirect(`${origin}/onboarding`);
     }
+
+    const response = NextResponse.redirect(`${origin}${destination}`);
+    // Imprescindible: las cookies de sesión deben ir en el 302
+    pendingCookies.forEach(({ name, value, options }) => {
+      response.cookies.set(name, value, options);
+    });
+    if (isRecovery) {
+      response.cookies.set("xaxa-password-recovery", "1", {
+        path: "/",
+        maxAge: 60 * 30,
+        sameSite: "lax",
+        httpOnly: false,
+      });
+    }
+    return response;
   } catch (error) {
     console.error("[auth/callback] unexpected:", error);
     return NextResponse.redirect(`${origin}/login?error=auth`);

@@ -8,6 +8,15 @@ import { AuthShell } from "@/components/auth/auth-shell";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 
+function clearRecoveryFlag() {
+  try {
+    document.cookie =
+      "xaxa-password-recovery=; Path=/; Max-Age=0; SameSite=Lax";
+  } catch {
+    // ignore
+  }
+}
+
 export default function ResetPasswordPage() {
   const router = useRouter();
   const [password, setPassword] = useState("");
@@ -21,20 +30,80 @@ export default function ResetPasswordPage() {
     const supabase = createClient();
     let cancelled = false;
 
-    (async () => {
+    async function establishSession() {
+      const params = new URLSearchParams(window.location.search);
+      if (params.get("error") === "link") {
+        if (!cancelled) {
+          setReady(false);
+          setChecking(false);
+          setError("El enlace no es válido o ha caducado.");
+        }
+        return;
+      }
+
+      // Fallback PKCE si el code llega aquí sin pasar por /auth/callback
+      const code = params.get("code");
+      if (code) {
+        const { error: exchangeError } =
+          await supabase.auth.exchangeCodeForSession(code);
+        if (!cancelled) {
+          if (exchangeError) {
+            setReady(false);
+            setError("El enlace no es válido o ha caducado.");
+          } else {
+            setReady(true);
+            window.history.replaceState({}, "", "/reset-password");
+          }
+          setChecking(false);
+        }
+        return;
+      }
+
+      // Flujo implícito antiguo: tokens en el hash
+      const hash = window.location.hash.replace(/^#/, "");
+      if (hash) {
+        const hashParams = new URLSearchParams(hash);
+        const access_token = hashParams.get("access_token");
+        const refresh_token = hashParams.get("refresh_token");
+        const type = hashParams.get("type");
+        if (access_token && refresh_token && type === "recovery") {
+          const { error: sessionError } = await supabase.auth.setSession({
+            access_token,
+            refresh_token,
+          });
+          if (!cancelled) {
+            if (sessionError) {
+              setReady(false);
+              setError("El enlace no es válido o ha caducado.");
+            } else {
+              setReady(true);
+              window.history.replaceState({}, "", "/reset-password");
+            }
+            setChecking(false);
+          }
+          return;
+        }
+      }
+
       const {
         data: { session },
       } = await supabase.auth.getSession();
       if (!cancelled) {
         setReady(!!session);
         setChecking(false);
+        if (!session) {
+          setError("El enlace no es válido o ha caducado.");
+        }
       }
-    })();
+    }
+
+    void establishSession();
 
     const { data: sub } = supabase.auth.onAuthStateChange((event) => {
       if (event === "PASSWORD_RECOVERY" || event === "SIGNED_IN") {
         setReady(true);
         setChecking(false);
+        setError(null);
       }
     });
 
@@ -69,6 +138,7 @@ export default function ResetPasswordPage() {
       return;
     }
 
+    clearRecoveryFlag();
     router.push("/dashboard");
     router.refresh();
   }
@@ -76,7 +146,9 @@ export default function ResetPasswordPage() {
   if (checking) {
     return (
       <AuthShell>
-        <p className="text-center text-sm text-stone-500">Comprobando enlace…</p>
+        <p className="text-center text-sm text-stone-500">
+          Comprobando enlace…
+        </p>
       </AuthShell>
     );
   }
@@ -86,7 +158,7 @@ export default function ResetPasswordPage() {
       <AuthShell>
         <div className="space-y-4 text-center">
           <p className="text-sm text-stone-700">
-            El enlace no es válido o ha caducado. Pide uno nuevo.
+            {error ?? "El enlace no es válido o ha caducado. Pide uno nuevo."}
           </p>
           <Link
             href="/forgot-password"
@@ -102,7 +174,14 @@ export default function ResetPasswordPage() {
   return (
     <AuthShell>
       <form onSubmit={onSubmit} className="space-y-4">
-        <p className="text-sm text-stone-600">Elige tu nueva contraseña.</p>
+        <div>
+          <h1 className="font-display text-xl font-semibold text-navy">
+            Nueva contraseña
+          </h1>
+          <p className="mt-1 text-sm text-stone-600">
+            Elige tu nueva contraseña para entrar en X.
+          </p>
+        </div>
         <Input
           id="password"
           label="Nueva contraseña"
